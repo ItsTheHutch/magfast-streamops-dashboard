@@ -4,7 +4,8 @@ A browser-based dashboard for running the [magFAST](https://horaro.net/magfast) 
 
 What it does (✅ done, 🚧 planned):
 
-- 🚧 Edit the current segment, up to 4 performers, and the next segment, writing them to text files that OBS text sources read
+- ✅ Edit the current segment, up to 4 performers, and the next segment, writing them to text files that OBS text sources read
+- ✅ Performer directory: pronouns and socials saved once and filled in automatically by name
 - 🚧 Segment timer with a finish button per performer, shown in OBS as a browser source
 - 🚧 Import the run order from Horaro, so operators click **Load**, check the fields and click **Save**
 - 🚧 Omnibar browser source: rotating logos, an info ticker and the Tiltify donation total
@@ -38,6 +39,27 @@ The defaults live in `config/config.example.json`. To change any of them, copy t
 | `horaro` | Event and schedule slugs (`magfast` / `2027`), an optional hidden-column key, and the column-name mapping |
 | `tiltify` | Campaign ID and API credentials for the donation total and incentives |
 | `twitch` | App credentials for updating the stream title and category |
+
+## Using the dashboard
+
+**Run tab.** Fill in the current segment, performers and up next. Changed fields are outlined in gold until you click **Save** (or press Ctrl+S). Saving rewrites the OBS text files and updates every open dashboard. **Revert** discards unsaved edits. If another operator saves while you're editing, only the fields you haven't touched update.
+
+Typing or picking a name that's in the performer directory fills in that performer's pronouns and socials. Names that aren't in the directory get a **Not in directory** badge, and **Save to directory** adds them.
+
+**Performers tab.** Add, edit and delete directory entries. Handles can be pasted as `@name` or as a full profile URL; they're cleaned up to just the handle.
+
+## OBS text files
+
+These files are written to `outputDir` on every save. Unused fields are written as empty files, so OBS shows nothing.
+
+| File | Contents |
+|---|---|
+| `current_name.txt`, `current_category.txt`, `current_estimate.txt` | Current segment |
+| `performer1_name.txt` … `performer4_name.txt` | Performer names |
+| `performerN_pronouns.txt` | Pronouns |
+| `performerN_social.txt` | Social with its site, e.g. `twitch.tv/BlazeBops`, `youtube.com/@name` |
+| `performerN_handle.txt` | Just the handle (`BlazeBops`, `@name`), for layouts with a platform icon |
+| `next_name.txt`, `next_category.txt`, `next_estimate.txt`, `next_performers.txt` | Up next |
 
 ## Running on the OBS PC (Windows)
 

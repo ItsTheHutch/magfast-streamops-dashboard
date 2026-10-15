@@ -4,17 +4,109 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>magFAST StreamOps</title>
+  <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
-  <h1>magFAST StreamOps</h1>
-  <p id="status">Connecting…</p>
+  <header class="topbar">
+    <div class="brand">magFAST <span>StreamOps</span></div>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="run">Run</button>
+      <button class="tab" role="tab" data-tab="performers">Performers</button>
+    </nav>
+    <div id="conn" class="conn" data-state="connecting">Connecting…</div>
+  </header>
+
+  <main>
+    <!-- Run tab -->
+    <section id="tab-run" class="panel" role="tabpanel">
+      <div class="actionbar">
+        <span id="dirty-note" class="dirty-note" hidden>Unsaved changes</span>
+        <button type="button" id="revert" class="btn" disabled>Revert</button>
+        <button type="button" id="save" class="btn primary" disabled>Save <kbd>Ctrl+S</kbd></button>
+      </div>
+
+      <form id="run-form" autocomplete="off">
+        <fieldset class="card">
+          <legend>Current segment</legend>
+          <div class="grid segment-grid">
+            <label>Segment name<input data-path="current.name" placeholder="e.g. Mega Man X"></label>
+            <label>Category<input data-path="current.category" placeholder="e.g. Any%"></label>
+            <label>Estimate<input data-path="current.estimate" placeholder="H:MM:SS"></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="card">
+          <legend>Performers</legend>
+          <div id="performer-slots" class="slots"></div>
+        </fieldset>
+
+        <fieldset class="card">
+          <legend>Up next</legend>
+          <div class="grid segment-grid">
+            <label>Segment name<input data-path="next.name"></label>
+            <label>Category<input data-path="next.category"></label>
+            <label>Estimate<input data-path="next.estimate" placeholder="H:MM:SS"></label>
+          </div>
+          <label>Performers<input data-path="next.performers" placeholder="e.g. RunnerA vs RunnerB"></label>
+        </fieldset>
+      </form>
+    </section>
+
+    <!-- Performers tab -->
+    <section id="tab-performers" class="panel" role="tabpanel" hidden>
+      <div class="directory">
+        <div class="card">
+          <div class="list-head">
+            <input type="search" id="dir-search" placeholder="Search performers" aria-label="Search performers">
+            <button type="button" id="dir-new" class="btn">New</button>
+          </div>
+          <ul id="dir-list" class="dir-list"></ul>
+          <p id="dir-count" class="muted"></p>
+        </div>
+
+        <form id="dir-form" class="card" autocomplete="off">
+          <h2 id="dir-form-title">New performer</h2>
+          <input type="hidden" name="id">
+          <label>Name<input name="name" required></label>
+          <label>Pronouns<input name="pronouns" placeholder="e.g. they/them"></label>
+          <div class="row">
+            <label>Social<select name="platform" data-platforms></select></label>
+            <label class="grow">Handle or URL<input name="handle"></label>
+          </div>
+          <label>Twitch handle <small>(for the stream title; leave blank if Social is Twitch)</small><input name="twitch"></label>
+          <div class="form-actions">
+            <button type="submit" class="btn primary">Save performer</button>
+            <button type="button" id="dir-delete" class="btn danger" hidden>Delete</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <datalist id="directory-names"></datalist>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <template id="performer-slot">
+    <div class="slot">
+      <div class="slot-head">
+        <h3></h3>
+        <span class="badge" data-badge hidden>Not in directory</span>
+        <div class="slot-actions">
+          <button type="button" class="btn small" data-action="to-directory">Save to directory</button>
+          <button type="button" class="btn small ghost" data-action="clear">Clear</button>
+        </div>
+      </div>
+      <label>Name<input data-field="name" list="directory-names"></label>
+      <label>Pronouns<input data-field="pronouns" placeholder="e.g. she/her"></label>
+      <div class="row">
+        <label>Social<select data-field="social.platform" data-platforms></select></label>
+        <label class="grow">Handle or URL<input data-field="social.handle"></label>
+      </div>
+      <label>Twitch handle <small>(blank = use Social if Twitch)</small><input data-field="twitch"></label>
+    </div>
+  </template>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script>
-    const socket = io();
-    const status = document.getElementById('status');
-    socket.on('hello', () => { status.textContent = 'Connected to server.'; });
-    socket.on('disconnect', () => { status.textContent = 'Disconnected — retrying…'; });
-  </script>
+  <script type="module" src="dashboard.js"></script>
 </body>
 </html>
