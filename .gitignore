@@ -1,0 +1,13 @@
+node_modules/
+
+# Runtime data and OBS output (machine-specific)
+data/
+output/
+
+# Local config holds secrets (Tiltify / Twitch credentials)
+config/config.json
+
+.env
+*.log
+.DS_Store
+Thumbs.db

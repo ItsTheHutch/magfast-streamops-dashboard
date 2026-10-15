@@ -1,0 +1,30 @@
+{
+  "port": 3000,
+  "host": "0.0.0.0",
+  "password": "",
+  "outputDir": "./output",
+  "dataDir": "./data",
+  "horaro": {
+    "event": "magfast",
+    "schedule": "2027",
+    "hiddenKey": "",
+    "columns": {
+      "name": "What",
+      "category": "Category",
+      "performers": "Who",
+      "twitchCategory": "Twitch Category"
+    }
+  },
+  "tiltify": {
+    "clientId": "",
+    "clientSecret": "",
+    "campaignId": "",
+    "isTeamCampaign": false,
+    "pollSeconds": 15
+  },
+  "twitch": {
+    "clientId": "",
+    "clientSecret": "",
+    "redirectUri": "http://localhost:3000/auth/twitch/callback"
+  }
+}
