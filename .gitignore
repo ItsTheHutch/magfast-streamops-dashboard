@@ -1,8 +1,8 @@
 node_modules/
 
 # Runtime data and OBS output (machine-specific)
-data/
-output/
+/data/
+/output/
 
 # Local config holds secrets (Tiltify / Twitch credentials)
 config/config.json
@@ -11,3 +11,7 @@ config/config.json
 *.log
 .DS_Store
 Thumbs.db
+
+# Python caches (from the ui-ux-pro-max skill scripts)
+__pycache__/
+*.pyc
