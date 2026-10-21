@@ -4,67 +4,198 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>magFAST StreamOps</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">magFAST <span>StreamOps</span></div>
     <nav class="tabs" role="tablist">
-      <button class="tab" role="tab" data-tab="run">Run</button>
+      <button class="tab" role="tab" data-tab="dashboard">Dashboard</button>
+      <button class="tab" role="tab" data-tab="edit">Edit Segment</button>
+      <button class="tab" role="tab" data-tab="schedule">Schedule</button>
       <button class="tab" role="tab" data-tab="performers">Performers</button>
+      <button class="tab" role="tab" data-tab="settings">Settings</button>
     </nav>
-    <div id="conn" class="conn" data-state="connecting">Connecting…</div>
+    <div id="conn" class="conn" data-state="connecting" role="status">Connecting…</div>
   </header>
 
   <main>
-    <!-- Run tab -->
-    <section id="tab-run" class="panel" role="tabpanel">
-      <div class="actionbar">
-        <span id="dirty-note" class="dirty-note" hidden>Unsaved changes</span>
+    <!-- Dashboard tab -->
+    <section id="tab-dashboard" class="panel" role="tabpanel" hidden>
+      <div class="dash">
+        <div class="dash-left">
+          <section class="segment live dash-live dash-segment" data-dash="current" data-type="" aria-labelledby="dash-current-title">
+            <header class="segment-head">
+              <h2 id="dash-current-title">Live Segment</h2>
+              <span class="type-badge" data-role="type" hidden></span>
+            </header>
+            <p class="dash-name" data-role="name"></p>
+            <dl class="dash-meta" data-role="meta">
+              <div><dt>Category</dt><dd data-role="category"></dd></div>
+              <div><dt>Estimate</dt><dd data-role="estimate"></dd></div>
+            </dl>
+            <h3 class="dash-sub" id="dash-current-performers" data-role="performers-title">Performers</h3>
+            <ul class="dash-performers" data-role="performers" aria-labelledby="dash-current-performers"></ul>
+            <p class="dash-empty" data-role="empty" hidden>Nothing is live yet. Set up a segment on <a href="#edit" data-goto="edit">Edit Segment</a>.</p>
+          </section>
+
+          <!-- Promote Next Segment to Live, once the operator has checked it. -->
+          <div class="dash-promote">
+            <label class="promote-check"><input type="checkbox" id="promote-ready" disabled> Next Segment is ready to go live</label>
+            <div class="promote-actions">
+              <button type="button" id="promote-go" class="btn advance-btn" disabled><svg class="advance-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg> Move to Live</button>
+              <button type="button" id="promote-undo" class="btn small undo-btn" hidden>Undo move</button>
+            </div>
+            <p class="promote-note" id="promote-note" hidden></p>
+          </div>
+
+          <section class="segment next dash-segment" data-dash="next" data-type="" aria-labelledby="dash-next-title">
+            <header class="segment-head">
+              <h2 id="dash-next-title">Next Segment</h2>
+              <span class="type-badge" data-role="type" hidden></span>
+            </header>
+            <p class="dash-name" data-role="name"></p>
+            <dl class="dash-meta" data-role="meta">
+              <div><dt>Category</dt><dd data-role="category"></dd></div>
+              <div><dt>Estimate</dt><dd data-role="estimate"></dd></div>
+            </dl>
+            <h3 class="dash-sub" id="dash-next-performers" data-role="performers-title">Performers</h3>
+            <ul class="dash-performers" data-role="performers" aria-labelledby="dash-next-performers"></ul>
+            <p class="dash-empty" data-role="empty" hidden>Nothing is set up yet. Set up the next segment on <a href="#edit" data-goto="edit">Edit Segment</a>.</p>
+          </section>
+        </div>
+
+        <section class="timer-panel" aria-labelledby="timer-title">
+          <div class="timer" data-status="stopped">
+            <canvas class="race-flag" aria-hidden="true"></canvas>
+            <header class="timer-head">
+              <h2 id="timer-title">Timer</h2>
+              <p class="timer-status" id="timer-status"></p>
+            </header>
+            <div class="timer-clock timer-face" id="timer-clock" role="timer" aria-label="Timer"></div>
+            <div class="timer-foot">
+            <div class="timer-controls">
+              <button type="button" id="timer-start" class="btn primary timer-btn" disabled>Start</button>
+              <button type="button" id="timer-pause" class="btn timer-btn" hidden>Pause</button>
+              <button type="button" id="timer-resume" class="btn primary timer-btn" hidden>Resume</button>
+              <button type="button" id="timer-finish" class="btn primary timer-btn" hidden>Finish</button>
+              <button type="button" id="timer-unfinish" class="btn timer-btn" hidden>Undo finish</button>
+              <button type="button" id="timer-reset" class="btn timer-btn" disabled>Reset</button>
+            </div>
+            <button type="button" id="timer-race" class="race-toggle" aria-pressed="false" hidden>Race Mode</button>
+            </div>
+          </div>
+          <div class="runners" id="runners"></div>
+        </section>
+      </div>
+    </section>
+
+    <!-- Edit Segment tab -->
+    <section id="tab-edit" class="panel" role="tabpanel" hidden>
+      <form id="run-form" autocomplete="off">
+        <section class="segment live" data-segment="current" aria-labelledby="live-title">
+          <header class="segment-head">
+            <h2 id="live-title">Live Segment</h2>
+            <span class="type-badge" data-type-badge></span>
+          </header>
+          <label class="segment-name"><span class="sr-only">Segment name</span><input data-path="current.name" placeholder="e.g. Mega Man X"></label>
+          <div class="segment-meta">
+            <label>Category<input data-path="current.category" placeholder="e.g. Any%"></label>
+            <label class="estimate">Estimate<input data-path="current.estimate" data-estimate inputmode="numeric" placeholder="0:00:00"></label>
+            <div data-type-picker="current.type"></div>
+          </div>
+          <h3 class="segment-sub">Performers</h3>
+          <div class="slots" data-slots="current"></div>
+        </section>
+
+        <div class="advance">
+          <svg class="advance-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          <button type="button" id="advance" class="btn advance-btn" disabled>Move Next Segment to Live</button>
+          <svg class="advance-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          <button type="button" id="undo-advance" class="btn small undo-btn" hidden>Undo move</button>
+        </div>
+
+        <section class="segment next" data-segment="next" aria-labelledby="next-title">
+          <header class="segment-head">
+            <h2 id="next-title">Next Segment</h2>
+            <span class="type-badge" data-type-badge></span>
+          </header>
+          <p class="segment-note">Set up the next segment for OBS here while the live one runs.</p>
+          <label class="segment-name"><span class="sr-only">Segment name</span><input data-path="next.name" placeholder="Segment name"></label>
+          <div class="segment-meta">
+            <label>Category<input data-path="next.category" placeholder="e.g. Any%"></label>
+            <label class="estimate">Estimate<input data-path="next.estimate" data-estimate inputmode="numeric" placeholder="0:00:00"></label>
+            <div data-type-picker="next.type"></div>
+          </div>
+          <h3 class="segment-sub">Performers</h3>
+          <div class="slots" data-slots="next"></div>
+        </section>
+
+        <section class="future" aria-labelledby="future-title">
+          <h2 id="future-title">Future runs</h2>
+          <p class="future-note">Shown on the break scene.</p>
+          <div id="future-rows" class="future-rows"></div>
+        </section>
+      </form>
+
+      <div class="savebar" data-state="clean">
+        <p id="run-status" class="run-status" aria-live="polite">OBS text files are up to date</p>
         <button type="button" id="revert" class="btn" disabled>Revert</button>
         <button type="button" id="save" class="btn primary" disabled>Save <kbd>Ctrl+S</kbd></button>
       </div>
+    </section>
 
-      <form id="run-form" autocomplete="off">
-        <fieldset class="card">
-          <legend>Current segment</legend>
-          <div class="grid segment-grid">
-            <label>Segment name<input data-path="current.name" placeholder="e.g. Mega Man X"></label>
-            <label>Category<input data-path="current.category" placeholder="e.g. Any%"></label>
-            <label>Estimate<input data-path="current.estimate" placeholder="H:MM:SS"></label>
+    <!-- Schedule tab -->
+    <section id="tab-schedule" class="panel" role="tabpanel" hidden>
+      <header class="sched-head">
+        <div>
+          <h2>Schedule</h2>
+          <p class="sched-source" id="sched-source"></p>
+        </div>
+        <button type="button" id="sched-refresh" class="btn">Refresh schedule</button>
+      </header>
+      <p class="sched-updated" id="sched-updated"></p>
+      <p class="sched-error" id="sched-error" role="alert" hidden></p>
+      <ul class="sched-warnings" id="sched-warnings" hidden></ul>
+      <div class="sched-follow" id="sched-follow">
+        <p id="sched-follow-text"></p>
+        <button type="button" id="sched-unlink" class="btn small" hidden>Stop following</button>
+      </div>
+      <div class="sched-scroll">
+        <!-- Laid out as a grid rather than a <table>: a sticky day heading can then stop at the end of
+             its own day, which is what lets the next day push it out of view. -->
+        <div class="sched-table" id="sched-table" role="table" aria-label="Schedule">
+          <div class="sched-colhead" role="rowgroup">
+            <div class="sched-cols" role="row">
+              <span role="columnheader">Start</span>
+              <span role="columnheader">Segment</span>
+              <span role="columnheader">Performers</span>
+              <span role="columnheader">Estimate</span>
+              <span role="columnheader">Type</span>
+              <span role="columnheader"><span class="sr-only">Actions</span></span>
+            </div>
           </div>
-        </fieldset>
-
-        <fieldset class="card">
-          <legend>Performers</legend>
-          <div id="performer-slots" class="slots"></div>
-        </fieldset>
-
-        <fieldset class="card">
-          <legend>Up next</legend>
-          <div class="grid segment-grid">
-            <label>Segment name<input data-path="next.name"></label>
-            <label>Category<input data-path="next.category"></label>
-            <label>Estimate<input data-path="next.estimate" placeholder="H:MM:SS"></label>
-          </div>
-          <label>Performers<input data-path="next.performers" placeholder="e.g. RunnerA vs RunnerB"></label>
-        </fieldset>
-      </form>
+        </div>
+      </div>
+      <p class="sched-empty" id="sched-empty" hidden></p>
     </section>
 
     <!-- Performers tab -->
     <section id="tab-performers" class="panel" role="tabpanel" hidden>
       <div class="directory">
-        <div class="card">
+        <div class="dir-browse">
           <div class="list-head">
             <input type="search" id="dir-search" placeholder="Search performers" aria-label="Search performers">
-            <button type="button" id="dir-new" class="btn">New</button>
+            <button type="button" id="dir-new" class="btn">New performer</button>
           </div>
           <ul id="dir-list" class="dir-list"></ul>
           <p id="dir-count" class="muted"></p>
         </div>
 
-        <form id="dir-form" class="card" autocomplete="off">
+        <form id="dir-form" class="dir-form" autocomplete="off">
           <h2 id="dir-form-title">New performer</h2>
           <input type="hidden" name="id">
           <label>Name<input name="name" required></label>
@@ -73,13 +204,97 @@
             <label>Social<select name="platform" data-platforms></select></label>
             <label class="grow">Handle or URL<input name="handle"></label>
           </div>
-          <label>Twitch handle <small>(for the stream title; leave blank if Social is Twitch)</small><input name="twitch"></label>
           <div class="form-actions">
             <button type="submit" class="btn primary">Save performer</button>
             <button type="button" id="dir-delete" class="btn danger" hidden>Delete</button>
           </div>
         </form>
       </div>
+    </section>
+
+    <!-- Settings tab -->
+    <section id="tab-settings" class="panel" role="tabpanel" hidden>
+      <form id="schedule-form" class="schedule-settings" autocomplete="off" novalidate>
+        <h2>Horaro schedule</h2>
+        <p>Import the run order from horaro.net. It's shown on Schedule, and Load as Next there fills Edit Segment's Next Segment and Future runs from it.</p>
+        <label>Schedule address<input name="url" placeholder="https://horaro.net/magfast/2027" spellcheck="false"></label>
+        <label>Hidden column key <small>Only needed if the schedule has hidden columns.</small><input name="hiddenKey" spellcheck="false"></label>
+        <fieldset class="schedule-columns">
+          <legend>Which Horaro column holds each field</legend>
+          <div class="schedule-columns-grid">
+            <label>Segment name<input name="col-name" list="horaro-columns"></label>
+            <label>Category<input name="col-category" list="horaro-columns"></label>
+            <label>Performers<input name="col-performers" list="horaro-columns"></label>
+            <label>Segment type<input name="col-type" list="horaro-columns"></label>
+          </div>
+        </fieldset>
+        <label>A segment is Host/Interstitial when its segment type column contains<input name="hostKeyword" placeholder="Interstitial"></label>
+        <label class="check-row"><input type="checkbox" name="stripPrefixes"> <span id="strip-label">Remove "Speedrun - " and "Interstitial - " from the start of categories</span></label>
+        <label class="interval">Check for changes every<input type="number" name="intervalMinutes" min="1" max="60" step="1"> minutes</label>
+        <div class="schedule-actions">
+          <button type="button" id="schedule-reset" class="btn danger">Reset schedule data</button>
+          <button type="submit" id="schedule-save" class="btn primary">Save and import</button>
+        </div>
+        <datalist id="horaro-columns"></datalist>
+      </form>
+
+      <section class="font-settings" aria-labelledby="font-title">
+        <h2 id="font-title">Timer font</h2>
+        <p>Used for the timer on the Dashboard and in OBS. Upload a <code>.woff2</code>, <code>.woff</code>, <code>.ttf</code> or <code>.otf</code> file of up to 10 MB.</p>
+        <div class="font-preview timer-face" aria-hidden="true">1:23:45.6</div>
+        <p class="font-current" id="font-current">Using the default font.</p>
+        <div class="font-actions">
+          <input type="file" id="font-file" class="sr-only" tabindex="-1" accept=".woff2,.woff,.ttf,.otf">
+          <button type="button" id="font-upload" class="btn primary">Upload font</button>
+          <button type="button" id="font-clear" class="btn" hidden>Use default font</button>
+        </div>
+
+        <div class="overlay-url">
+          <label for="timer-url">Timer for OBS</label>
+          <div class="copy-field">
+            <input id="timer-url" readonly spellcheck="false">
+            <button type="button" class="btn copy-btn" data-copy="timer-url" aria-label="Copy the timer address">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <p class="overlay-hint">In OBS, add a <strong>Browser</strong> source with this address. It shows just the clock, on a transparent background, in the font above, and fills the size you give the source. <a id="timer-url-open" target="_blank" rel="noopener">Open it in a new tab</a></p>
+        </div>
+      </section>
+
+      <form id="settings-form" class="settings" autocomplete="off" novalidate>
+        <header class="settings-head">
+          <h2>OBS text files</h2>
+          <p>Choose where each field is written. A file name or relative path goes inside the output folder; a full path can go anywhere. Every location must end in <code>.txt</code>. Fields marked 1–4 write one file each, with <code>{n}</code> replaced by the performer or run number.</p>
+        </header>
+
+        <label class="settings-folder">Output folder
+          <input name="outputDir">
+          <small id="settings-folder-note"></small>
+        </label>
+
+        <div id="settings-groups" class="settings-groups"></div>
+
+        <div class="settings-actions">
+          <button type="button" id="settings-reset" class="btn">Reset to defaults</button>
+          <button type="button" id="settings-revert" class="btn" disabled>Revert</button>
+          <button type="submit" id="settings-save" class="btn primary" disabled>Save settings</button>
+        </div>
+      </form>
+
+      <!-- Background: Castle Bravo, 1954, US Department of Energy (public domain), via Wikimedia Commons. -->
+      <section class="danger-zone nuclear" aria-labelledby="reset-all-title">
+        <h2 id="reset-all-title"><svg class="radiation" viewBox="0 0 24 24" aria-hidden="true"><circle class="radiation-disc" cx="12" cy="12" r="11.6"/><path d="M15.15 12.00 L22.80 12.00 A10.80 10.80 0 0 0 17.40 2.65 L13.58 9.27 A3.15 3.15 0 0 1 15.15 12.00Z M10.43 9.27 L6.60 2.65 A10.80 10.80 0 0 0 1.20 12.00 L8.85 12.00 A3.15 3.15 0 0 1 10.43 9.27Z M10.42 14.73 L6.60 21.35 A10.80 10.80 0 0 0 17.40 21.35 L13.58 14.73 A3.15 3.15 0 0 1 10.42 14.73Z"/><circle cx="12" cy="12" r="2.10"/></svg> NUCLEAR RESET</h2>
+        <p>Erases <strong>all data and settings</strong> and starts the app over from scratch:</p>
+        <ul>
+          <li>Every performer in the directory</li>
+          <li>The Live Segment, Next Segment, Future runs and the timer</li>
+          <li>The imported schedule and the Horaro settings</li>
+          <li>Every setting on this page: the output folder, file locations and the uploaded timer font</li>
+        </ul>
+        <p>Every OBS text file is written blank. A backup copy of everything is saved in <code>data/backups</code> first.</p>
+        <button type="button" id="reset-all" class="btn danger-solid">Reset All Data</button>
+      </section>
     </section>
   </main>
 
@@ -89,22 +304,68 @@
   <template id="performer-slot">
     <div class="slot">
       <div class="slot-head">
-        <h3></h3>
+        <h3>Performer <span class="slot-num"></span></h3>
         <span class="badge" data-badge hidden>Not in directory</span>
-        <div class="slot-actions">
-          <button type="button" class="btn small" data-action="to-directory">Save to directory</button>
-          <button type="button" class="btn small ghost" data-action="clear">Clear</button>
-        </div>
       </div>
-      <label>Name<input data-field="name" list="directory-names"></label>
+      <label>Name<input data-field="name" list="directory-names" placeholder="Type or pick a name"></label>
       <label>Pronouns<input data-field="pronouns" placeholder="e.g. she/her"></label>
       <div class="row">
         <label>Social<select data-field="social.platform" data-platforms></select></label>
         <label class="grow">Handle or URL<input data-field="social.handle"></label>
       </div>
-      <label>Twitch handle <small>(blank = use Social if Twitch)</small><input data-field="twitch"></label>
+      <div class="slot-actions">
+        <button type="button" class="btn small" data-action="to-directory">Save to directory</button>
+        <button type="button" class="btn small ghost" data-action="clear">Clear</button>
+      </div>
     </div>
   </template>
+
+  <template id="future-row">
+    <div class="future-row">
+      <span class="row-num"></span>
+      <label><span class="lbl">Segment name</span><input data-run-field="name"></label>
+      <label><span class="lbl">Category</span><input data-run-field="category"></label>
+      <label class="estimate"><span class="lbl">Estimate</span><input data-run-field="estimate" data-estimate inputmode="numeric" placeholder="0:00:00"></label>
+      <label><span class="lbl">Performers</span><input data-run-field="performers" placeholder="e.g. RunnerA vs RunnerB"></label>
+      <div data-type-picker></div>
+    </div>
+  </template>
+
+  <template id="type-picker">
+    <fieldset class="type-picker">
+      <legend>Segment type</legend>
+      <div class="type-options">
+        <label class="type-opt" data-type="core"><input type="radio" value="core" required><span></span></label>
+        <label class="type-opt" data-type="host"><input type="radio" value="host" required><span></span></label>
+      </div>
+    </fieldset>
+  </template>
+
+  <template id="runner-card">
+    <div class="runner">
+      <div class="runner-head">
+        <span class="runner-num"></span>
+        <p class="runner-name"></p>
+        <span class="runner-place"></span>
+      </div>
+      <p class="runner-time timer-face"></p>
+      <div class="runner-actions">
+        <button type="button" class="btn primary" data-finish>Finish</button>
+        <button type="button" class="btn small" data-unfinish>Undo finish</button>
+      </div>
+    </div>
+  </template>
+
+  <dialog id="confirm-dialog" class="dialog" aria-labelledby="confirm-title" aria-describedby="confirm-body">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-body"></p>
+      <div class="dialog-actions">
+        <button type="submit" value="cancel" class="btn">Cancel</button>
+        <button type="submit" value="confirm" id="confirm-ok" class="btn primary" autofocus></button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="/socket.io/socket.io.js"></script>
   <script type="module" src="dashboard.js"></script>

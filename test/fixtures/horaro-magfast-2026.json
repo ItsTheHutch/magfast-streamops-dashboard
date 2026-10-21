@@ -1,0 +1,167 @@
+{
+  "data": {
+    "id": "5211ju79ws2cvm7a4b",
+    "name": "magFAST 2026",
+    "slug": "2026",
+    "timezone": "America/New_York",
+    "start": "2026-01-08T11:30:00-05:00",
+    "start_t": 1767889800,
+    "setup": "PT0S",
+    "setup_t": 0,
+    "updated": "2026-01-11T10:31:53Z",
+    "link": "https://horaro.net/magfast/2026",
+    "columns": [
+      "What",
+      "Category",
+      "Who",
+      "Couch / Guest",
+      "Incentives"
+    ],
+    "hidden_columns": [],
+    "items": [
+      {
+        "length": "PT30M",
+        "length_t": 1800,
+        "scheduled": "2026-01-08T11:30:00-05:00",
+        "scheduled_t": 1767889800,
+        "data": [
+          "MEGA Pre Show X",
+          "Behold! The Lemons.",
+          "BlazeBops",
+          "BlazeBops & TheSkipper1995",
+          "-"
+        ]
+      },
+      {
+        "length": "PT1H30M",
+        "length_t": 5400,
+        "scheduled": "2026-01-08T12:00:00-05:00",
+        "scheduled_t": 1767891600,
+        "data": [
+          "Mega Man X",
+          "Speedrun - Lemons%",
+          "BlazeBops",
+          "ItsTheHutch",
+          "Turn a Button into Lemonade!"
+        ]
+      },
+      {
+        "length": "PT15M",
+        "length_t": 900,
+        "scheduled": "2026-01-08T13:30:00-05:00",
+        "scheduled_t": 1767897000,
+        "data": [
+          "Potpourri Versus!",
+          "Interstitial",
+          "Valair - magFAST Staff",
+          null,
+          "-"
+        ]
+      },
+      {
+        "length": "PT1H30M",
+        "length_t": 5400,
+        "scheduled": "2026-01-08T13:45:00-05:00",
+        "scheduled_t": 1767897900,
+        "data": [
+          "Mega Man X2",
+          "Speedrun - 100% (Zero)",
+          "HCHecxz",
+          "Hawkfoot718",
+          "Bidwar - Save Zero or Save The Frames?"
+        ]
+      },
+      {
+        "length": "PT15M",
+        "length_t": 900,
+        "scheduled": "2026-01-08T15:15:00-05:00",
+        "scheduled_t": 1767903300,
+        "data": [
+          "Xbox Prototype Interview",
+          "Interstitial - Interview",
+          "Tito of Macho Nacho Productions",
+          "BlazeBops",
+          "-"
+        ]
+      },
+      {
+        "length": "PT15M",
+        "length_t": 900,
+        "scheduled": "2026-01-09T13:45:00-05:00",
+        "scheduled_t": 1767984300,
+        "data": [
+          "Mega Man X Weakness Quiz",
+          "Interstitial - Game Show",
+          "Xerobladedge & TheSkipper1995",
+          null,
+          "-"
+        ]
+      },
+      {
+        "length": "PT15M",
+        "length_t": 900,
+        "scheduled": "2026-01-10T14:15:00-05:00",
+        "scheduled_t": 1768072500,
+        "data": [
+          "[CANCELLED] Brain Age (DS) TAS",
+          "Interstitial - TAS",
+          "TASBot",
+          "dwangoAC",
+          "-"
+        ]
+      },
+      {
+        "length": "PT2H25M",
+        "length_t": 8700,
+        "scheduled": "2026-01-10T15:15:00-05:00",
+        "scheduled_t": 1768076100,
+        "data": [
+          "Super Mario 64 (DX Mod)",
+          "Speedrun - 70 Star Relay Race",
+          "RipSalty vs AllGood",
+          null,
+          "TBD"
+        ]
+      },
+      {
+        "length": "PT50M",
+        "length_t": 3000,
+        "scheduled": "2026-01-10T17:40:00-05:00",
+        "scheduled_t": 1768084800,
+        "data": [
+          "World Mario Super",
+          "Speedrun - Castles All",
+          "authorblues",
+          null,
+          "-"
+        ]
+      },
+      {
+        "length": "PT29M",
+        "length_t": 1740,
+        "scheduled": "2026-01-10T18:31:00-05:00",
+        "scheduled_t": 1768087860,
+        "data": [
+          "Untitled Goose Game",
+          "Speedrun - All Main Tasks",
+          "Risuruuu",
+          null,
+          "Bow%"
+        ]
+      },
+      {
+        "length": "PT1H15M",
+        "length_t": 4500,
+        "scheduled": "2026-01-10T21:00:00-05:00",
+        "scheduled_t": 1768096800,
+        "data": [
+          "Mega Man X (2 Players 1 Controller)",
+          "Speedrun - 100% 2p1c",
+          "Geo & Apty",
+          "Owly",
+          "Chamaeleon 3rd Grab - $???"
+        ]
+      }
+    ]
+  }
+}

@@ -2,6 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { normalizeDirectoryEntry, normalizeLive, sameName } from '../public/shared/model.js';
+import { normalizeOutputSettings } from '../public/shared/outputFiles.js';
+import { emptyTimer, normalizeTimer } from '../public/shared/timer.js';
+import { normalizeTimerFont } from './timerFont.js';
 
 // Reads JSON, falling back when the file is missing. A corrupt file is set aside, not overwritten.
 export function readJson(filePath, fallback) {
@@ -27,9 +30,22 @@ export function createStore(dataDir) {
   fs.mkdirSync(dataDir, { recursive: true });
   const statePath = path.join(dataDir, 'state.json');
   const performersPath = path.join(dataDir, 'performers.json');
+  const settingsPath = path.join(dataDir, 'settings.json');
+  const schedulePath = path.join(dataDir, 'schedule.json');
 
   const state = readJson(statePath, {});
   state.live = normalizeLive(state.live);
+  state.timer = normalizeTimer(state.timer);
+
+  const storedSettings = readJson(settingsPath, {});
+  let settings = {
+    ...normalizeOutputSettings(storedSettings),
+    timerFont: normalizeTimerFont(storedSettings?.timerFont),
+    schedule: storedSettings?.schedule ?? null, // normalized by the app, which knows the config defaults
+  };
+
+  // The last imported Horaro schedule, kept so it's there after a restart or without internet.
+  let schedule = readJson(schedulePath, null);
 
   const storedPerformers = readJson(performersPath, []);
   let performers = (Array.isArray(storedPerformers) ? storedPerformers : [])
@@ -50,6 +66,81 @@ export function createStore(dataDir) {
       state.live = normalizeLive(raw);
       writeJsonAtomic(statePath, state);
       return state.live;
+    },
+
+    getTimer() {
+      return state.timer;
+    },
+
+    saveTimer(timer) {
+      state.timer = normalizeTimer(timer);
+      writeJsonAtomic(statePath, state);
+      return state.timer;
+    },
+
+    fontsDir: path.join(dataDir, 'fonts'),
+
+    getSettings() {
+      return settings;
+    },
+
+    // Output folder and file locations. The timer font and schedule settings are kept as they are.
+    saveSettings(next) {
+      settings = { ...settings, ...normalizeOutputSettings(next) };
+      writeJsonAtomic(settingsPath, settings);
+      return settings;
+    },
+
+    setScheduleSettings(next) {
+      settings = { ...settings, schedule: next };
+      writeJsonAtomic(settingsPath, settings);
+      return settings.schedule;
+    },
+
+    getSchedule() {
+      return schedule;
+    },
+
+    saveSchedule(next) {
+      schedule = next;
+      writeJsonAtomic(schedulePath, schedule);
+      return schedule;
+    },
+
+    clearSchedule() {
+      schedule = null;
+      fs.rmSync(schedulePath, { force: true });
+    },
+
+    // Empty segments, Future runs and timer.
+    clearLive() {
+      state.live = normalizeLive({});
+      state.timer = emptyTimer();
+      writeJsonAtomic(statePath, state);
+    },
+
+    clearPerformers() {
+      performers = [];
+      persistPerformers();
+    },
+
+    // Copies the data files into data/backups/<time>-<reason>/ before a reset. Returns the folder.
+    backup(reason) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+      const folder = path.join(dataDir, 'backups', `${stamp}-${reason}`);
+      fs.mkdirSync(folder, { recursive: true });
+      for (const file of [statePath, performersPath, settingsPath, schedulePath]) {
+        if (fs.existsSync(file)) fs.copyFileSync(file, path.join(folder, path.basename(file)));
+      }
+      const fontsDir = path.join(dataDir, 'fonts');
+      if (fs.existsSync(fontsDir)) fs.cpSync(fontsDir, path.join(folder, 'fonts'), { recursive: true });
+      return folder;
+    },
+
+    setTimerFont(font) {
+      settings = { ...settings, timerFont: normalizeTimerFont(font) };
+      writeJsonAtomic(settingsPath, settings);
+      return settings.timerFont;
     },
 
     getPerformers() {

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>magFAST Timer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&display=swap">
+  <style>
+    /*
+      The timer for an OBS Browser source: just the clock, on a transparent background, in the
+      timer font from Settings. It fills the source's width and height. To restyle it, use the
+      Browser source's Custom CSS, e.g. .clock { color: gold; text-align: left; }
+      The page's status is on <body data-status="stopped|running|paused|finished">.
+    */
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    body {
+      display: flex;
+      align-items: center;
+      container-type: size;
+    }
+    .clock {
+      width: 100%;
+      font-family: var(--timer-font, "Barlow Condensed", "Arial Narrow", sans-serif);
+      font-weight: var(--timer-weight, 700);
+      font-size: min(80cqh, 15cqw);
+      line-height: 1;
+      text-align: center;
+      white-space: nowrap;
+      color: #fff;
+      text-shadow: 0 .03em .08em rgba(0, 0, 0, .6);
+      transition: opacity .2s;
+    }
+    /* One "0" wide per digit, so the clock holds still as it counts. */
+    .clock .d { display: inline-block; width: 1ch; text-align: center; }
+    .clock .tenths { font-size: .5em; }
+    body[data-status="paused"] .clock { opacity: .6; }
+    /* Hidden until the first time from the server arrives, so it never flashes a wrong time. */
+    body:not([data-status]) .clock { visibility: hidden; }
+  </style>
+</head>
+<body>
+  <div class="clock" id="clock" role="timer"></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="timer.js"></script>
+</body>
+</html>
