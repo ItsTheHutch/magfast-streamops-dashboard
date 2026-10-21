@@ -25,6 +25,36 @@
   <main>
     <!-- Dashboard tab -->
     <section id="tab-dashboard" class="panel" role="tabpanel" hidden>
+      <!-- Twitch stream title and category, as Twitch has them now. -->
+      <section class="twitch-panel" id="twitch-panel" data-state="off" aria-labelledby="twitch-heading">
+        <header class="twitch-head">
+          <h2 id="twitch-heading">Twitch</h2>
+          <a class="twitch-channel" id="twitch-channel" target="_blank" rel="noopener" hidden></a>
+          <p class="twitch-error" id="twitch-error" role="alert" hidden></p>
+        </header>
+        <p class="twitch-off" id="twitch-off">Connect the channel's Twitch account in <a href="#settings" data-goto="settings">Settings</a> to change the stream title and category from here.</p>
+        <form class="twitch-form" id="twitch-form" autocomplete="off" novalidate hidden>
+          <label class="twitch-title">Stream title
+            <input name="title" maxlength="140">
+            <small class="twitch-count" id="twitch-count" aria-live="polite"></small>
+          </label>
+          <div class="twitch-category">
+            <label for="twitch-category">Category</label>
+            <div class="combo">
+              <img class="combo-art" id="twitch-art" alt="" hidden>
+              <input id="twitch-category" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="twitch-results" placeholder="Search Twitch categories">
+              <ul class="combo-list" id="twitch-results" role="listbox" aria-label="Twitch categories" hidden></ul>
+            </div>
+            <small class="twitch-hint" id="twitch-category-hint"></small>
+          </div>
+          <div class="twitch-actions">
+            <button type="button" id="twitch-fill" class="btn">Use Live Segment</button>
+            <button type="button" id="twitch-revert" class="btn" disabled>Revert</button>
+            <button type="submit" id="twitch-update" class="btn twitch-btn" disabled>Update Twitch</button>
+          </div>
+        </form>
+      </section>
+
       <div class="dash">
         <div class="dash-left">
           <section class="segment live dash-live dash-segment" data-dash="current" data-type="" aria-labelledby="dash-current-title">
@@ -238,6 +268,36 @@
         <datalist id="horaro-columns"></datalist>
       </form>
 
+      <form id="twitch-settings" class="twitch-settings" autocomplete="off" novalidate>
+        <h2>Twitch</h2>
+        <p>Lets the Dashboard change the stream title and category. Connect the <strong>channel's own account</strong>: Twitch only lets a channel's owner change these.</p>
+        <ol class="twitch-steps">
+          <li>Register an application at <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener">dev.twitch.tv/console/apps</a>, with Category <em>Broadcaster Suite</em>, Client Type <em>Confidential</em>, and this OAuth Redirect URL:
+            <div class="copy-field">
+              <input id="twitch-redirect" readonly spellcheck="false" aria-label="OAuth Redirect URL">
+              <button type="button" class="btn copy-btn" data-copy="twitch-redirect" data-copy-name="Redirect URL" aria-label="Copy the redirect URL"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>Copy</span></button>
+            </div>
+          </li>
+          <li>Paste the application's Client ID and Client Secret below, and save.</li>
+          <li>On the OBS PC, at <code id="twitch-local-address">http://localhost:3000</code>, click <strong>Connect Twitch account</strong> and sign in as the channel.</li>
+        </ol>
+        <div class="twitch-creds">
+          <label>Client ID<input name="clientId" spellcheck="false"></label>
+          <label>Client Secret<input name="clientSecret" type="password" autocomplete="new-password" spellcheck="false"></label>
+        </div>
+        <label>Title template <small>Used by Use Live Segment on the Dashboard. You can use {name}, {category}, {performers} and {estimate}.</small><input name="titleTemplate" spellcheck="false"></label>
+        <div class="twitch-connection" id="twitch-connection" data-connected="false">
+          <p id="twitch-connection-text"></p>
+          <a id="twitch-connect" class="btn twitch-btn" href="/auth/twitch/start">Connect Twitch account</a>
+          <button type="button" id="twitch-disconnect" class="btn danger" hidden>Disconnect</button>
+        </div>
+        <p class="overlay-hint" id="twitch-localhost-note" hidden></p>
+        <div class="schedule-actions">
+          <span></span>
+          <button type="submit" id="twitch-save" class="btn primary">Save</button>
+        </div>
+      </form>
+
       <section class="font-settings" aria-labelledby="font-title">
         <h2 id="font-title">Timer font</h2>
         <p>Used for the timer on the Dashboard and in OBS. Upload a <code>.woff2</code>, <code>.woff</code>, <code>.ttf</code> or <code>.otf</code> file of up to 10 MB.</p>
@@ -253,7 +313,7 @@
           <label for="timer-url">Timer for OBS</label>
           <div class="copy-field">
             <input id="timer-url" readonly spellcheck="false">
-            <button type="button" class="btn copy-btn" data-copy="timer-url" aria-label="Copy the timer address">
+            <button type="button" class="btn copy-btn" data-copy="timer-url" data-copy-name="Timer address" aria-label="Copy the timer address">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
               <span>Copy</span>
             </button>
@@ -290,7 +350,7 @@
           <li>Every performer in the directory</li>
           <li>The Live Segment, Next Segment, Future runs and the timer</li>
           <li>The imported schedule and the Horaro settings</li>
-          <li>Every setting on this page: the output folder, file locations and the uploaded timer font</li>
+          <li>Every setting on this page: the Twitch connection, the output folder, file locations and the uploaded timer font</li>
         </ul>
         <p>Every OBS text file is written blank. A backup copy of everything is saved in <code>data/backups</code> first.</p>
         <button type="button" id="reset-all" class="btn danger-solid">Reset All Data</button>

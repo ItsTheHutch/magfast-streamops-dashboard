@@ -1,6 +1,6 @@
 # magFAST StreamOps Dashboard
 
-A browser-based dashboard for running the [magFAST](https://horaro.net/magfast) charity speedrun marathon stream. It runs on the OBS PC, and operators open it in a web browser on the same network.
+A browser-based dashboard for running the [magFAST](https://horaro.net/magfast) charity speedrun marathon stream. It runs on the stream PC and is opened in a web browser on that same PC.
 
 What it does (✅ done, 🚧 planned):
 
@@ -10,7 +10,7 @@ What it does (✅ done, 🚧 planned):
 - ✅ The timer as an OBS Browser source
 - ✅ Import the run order from Horaro, show it on Schedule, and fill Edit Segment from it
 - 🚧 Omnibar browser source: rotating logos, an info ticker and the Tiltify donation total
-- 🚧 Update the Twitch stream title and category
+- ✅ Update the Twitch stream title and category from the Dashboard
 
 ## Requirements
 
@@ -23,7 +23,7 @@ npm install
 npm start
 ```
 
-Then open <http://localhost:3000>. Other machines on the network can use `http://<obs-pc-ip>:3000`.
+Then open <http://localhost:3000> on the same PC. Only that PC can reach it (see [Security](#security)).
 
 `npm run dev` restarts the server automatically when files change. `npm test` runs the tests.
 
@@ -33,13 +33,12 @@ The defaults live in `config/config.example.json`. To change any of them, copy t
 
 | Key | Purpose |
 |---|---|
-| `port`, `host` | Where the server listens (default `0.0.0.0:3000`, which allows LAN access) |
-| `password` | Optional shared password for the dashboard. Overlays stay open so OBS can load them. |
+| `port`, `host` | Where the server listens. The default, `127.0.0.1:3000`, means only this PC can open the dashboard. `0.0.0.0` lets other computers on the network open it too, by the PC's IP address. There's no password, so only do that on a network you trust. |
 | `outputDir` | Folder that OBS text files are written to. Relative paths are resolved from the project folder. |
 | `dataDir` | Folder for saved state, the performer directory, logos and tokens |
 | `horaro` | Default Horaro schedule (`magfast` / `2027`), hidden-column key and column names. The Settings tab overrides these. |
 | `tiltify` | Campaign ID and API credentials for the donation total and incentives |
-| `twitch` | App credentials for updating the stream title and category |
+| `twitch` | Optional default Twitch app credentials (`clientId`, `clientSecret`) and `redirectUri`. Usually entered on the Settings tab instead. |
 
 ## Using the dashboard
 
@@ -54,6 +53,12 @@ The defaults live in `config/config.example.json`. To change any of them, copy t
 - **Locking and reset:** Race Mode can't be switched while any finish time is recorded. **Reset** turns it back off.
 - **Shared and saved:** every open dashboard shows the same timer, and it's saved in `data/state.json`, so it survives a server restart.
 - **Moving to a new segment** doesn't reset the timer. Reset it when the next run starts.
+
+**Twitch (top of the Dashboard).** Shows the channel's current stream title and category as Twitch has them, checked every minute.
+
+- **Changing them:** edit the title (up to 140 characters), search for a category and pick it from the list, and click **Update Twitch**. Clear the category box to remove the category.
+- **Use Live Segment:** fills the title from the Live Segment using the title template in Settings. For a Core Content segment it also looks up the game as the category.
+- **Before it works:** connect the channel's account in Settings.
 
 **Edit Segment tab.** The tab has three parts:
 
@@ -99,6 +104,17 @@ Typing or picking a name that's in the performer directory fills in that perform
 - **Where it's kept:** the last imported schedule is saved in `data/schedule.json`, so it's still there after a restart or without internet.
 - **Reset schedule data** (red) deletes the imported schedule and puts these settings back to their defaults. Edit Segment stops following the schedule but keeps its rows.
 
+**Settings tab: Twitch.**
+
+1. Register an application at [dev.twitch.tv/console/apps](https://dev.twitch.tv/console/apps): Category *Broadcaster Suite*, Client Type *Confidential*, with the OAuth Redirect URL shown in Settings (`http://localhost:3000/auth/twitch/callback` by default).
+2. Enter its Client ID and Client Secret in Settings and save.
+3. On the OBS PC, click **Connect Twitch account** and sign in as **the channel's own account**. Only the channel owner can change its title and category.
+
+How it works:
+- **Signing in:** Twitch only returns the sign-in to the registered address, which uses `localhost`, so connecting has to be done on the OBS PC.
+- **What's stored:** the secret and sign-in tokens stay on the server in `data/twitch.json`. They're never sent to the browser, and are renewed automatically when they expire.
+- **Settings:** the title template uses `{name}`, `{category}`, `{performers}` and `{estimate}`. **Disconnect** signs the account out and keeps the Client ID and Secret.
+
 **Settings tab: timer font.** Upload a `.woff2`, `.woff`, `.ttf` or `.otf` file of up to 10 MB to use for the timer. The file is kept in `data/fonts/`. **Use default font** switches back.
 
 **Settings tab: timer for OBS.** This shows the timer page's address with a **Copy** button. In OBS, add a **Browser** source with that address, for example `http://localhost:3000/overlay/timer.html` on the OBS PC.
@@ -116,12 +132,21 @@ Typing or picking a name that's in the performer directory fills in that perform
 
 **Settings tab: NUCLEAR RESET.** **Reset All Data** (at the very bottom) erases all data and settings, back to a fresh install.
 
-- **Erased:** every performer, the Live Segment, Next Segment, Future runs, the timer, the imported schedule, the Horaro settings, the output folder, the file locations and the uploaded timer font.
+- **Erased:** every performer, the Live Segment, Next Segment, Future runs, the timer, the imported schedule, the Horaro settings, the Twitch connection and app credentials, the output folder, the file locations and the uploaded timer font.
 - **Blanked:** every OBS text file, Core and Host alike, at both the old and the default locations.
 
 **Backups for both resets:** they ask for confirmation first, with Cancel selected by default. They copy the data files, and the timer font, into `data/backups/<date-time>-<reason>/` before changing anything. To undo a reset, stop the server, copy the files from that folder back into `data/`, and start it again.
 
 The section's background photo is the 1954 Castle Bravo test, a public-domain US Department of Energy photo from [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Castle_Bravo_Blast.jpg).
+
+## Security
+
+The dashboard is meant to be used only on the stream PC, so it has no password and no HTTPS. Instead:
+
+- **Only this PC can connect.** By default the server listens on `127.0.0.1`, so other computers on the network can't connect at all.
+- **Only the dashboard's own pages can use it.** Websites open in a browser on the stream PC, including OBS browser sources, could otherwise send it commands, such as changing the stream title or resetting data. The server refuses live connections and changes that come from any page that isn't its own.
+- **Only real local addresses are accepted.** Requests must be addressed to `localhost` or `127.0.0.1`, or to an IP address when LAN access is on. This blocks "DNS rebinding", where an outside website disguises its own domain as a local one.
+- **Secrets stay on the server.** The Twitch client secret and sign-in tokens are never sent to the browser.
 
 ## OBS text files
 

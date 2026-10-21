@@ -205,6 +205,7 @@ test('Reset All Data erases all data and settings, blanks every text file, and k
   await request(client, 'timer', { action: 'start' });
   const font = Buffer.concat([Buffer.from('wOF2'), Buffer.alloc(60)]);
   await fetch(`http://127.0.0.1:${port}/api/timer-font`, { method: 'PUT', headers: { 'X-Filename': 'clock.woff2' }, body: font });
+  await request(client, 'twitch:settings', { clientId: 'cid', clientSecret: 'shh' });
   const read = (name) => fs.readFileSync(path.join(config.outputDir, name), 'utf8');
   assert.equal(read('live/title.txt'), 'Mega Man X');
 
@@ -229,5 +230,7 @@ test('Reset All Data erases all data and settings, blanks every text file, and k
   assert.equal(settings.timerFont, null);
   assert.equal(fs.existsSync(path.join(config.dataDir, 'fonts', 'timer-font.woff2')), false);
   assert.equal(fs.existsSync(path.join(backup, 'fonts', 'timer-font.woff2')), true, 'the font is in the backup');
+  assert.equal(fs.existsSync(path.join(config.dataDir, 'twitch.json')), false, 'Twitch credentials erased');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(backup, 'twitch.json'), 'utf8')).clientId, 'cid');
   assert.equal(JSON.parse(fs.readFileSync(path.join(backup, 'settings.json'), 'utf8')).files['core.name'], 'live/title.txt');
 });

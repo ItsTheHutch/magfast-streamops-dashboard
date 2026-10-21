@@ -17,6 +17,8 @@ import {
   syncLive,
   unlink,
 } from './schedule.js';
+import { createTwitch } from './twitch.js';
+import { createAccessCheck, isLoopback } from './access.js';
 import { FONT_TYPES, MAX_FONT_BYTES, checkFontUpload, fontPath, removeFontFiles, writeFontFile } from './timerFont.js';
 
 // Builds the HTTP + Socket.IO server without starting it, so tests can run it on a spare port.
@@ -81,12 +83,26 @@ export function createApp(config) {
     if (store.getLive().schedule.nextIndex !== null) commitLive(unlink(store.getLive()));
   }
 
+  /* Twitch: stream title and category (see src/twitch.js). */
+  const twitch = createTwitch({ dataDir: config.dataDir, config: config.twitch, port: config.port ?? 3000 });
+  const twitchMessage = () => twitch.status();
+  let twitchTimer = null;
+  // Keeps the Dashboard showing the channel's real title, even if it's changed somewhere else.
+  async function pollTwitch() {
+    const before = JSON.stringify(twitchMessage());
+    await twitch.refreshChannel();
+    if (JSON.stringify(twitchMessage()) !== before) io.emit('twitch', twitchMessage());
+  }
+
   const startup = textFiles.write(store.getLive(), outputSettings());
   for (const error of startup.errors) console.error(`Text file error: ${error}`);
 
   const app = express();
   const server = http.createServer(app);
-  const io = new SocketServer(server);
+  // Only this computer's own dashboard pages may use it (see src/access.js).
+  const access = createAccessCheck({ lan: !isLoopback(config.host) });
+  const io = new SocketServer(server, { allowRequest: access.allowSocket });
+  app.use(access.middleware);
 
   app.use(express.json());
 
@@ -124,6 +140,28 @@ export function createApp(config) {
     res.json({ ok: true });
   });
 
+  // Twitch sign-in: Settings links to /auth/twitch/start, which sends the operator to Twitch; Twitch
+  // sends them back to /auth/twitch/callback. Either way they land on Settings with the result.
+  const backToSettings = (res, result) => res.redirect(`/?twitch=${encodeURIComponent(result)}#settings`);
+  app.get('/auth/twitch/start', (req, res) => {
+    try {
+      res.redirect(twitch.authorizeUrl());
+    } catch (err) {
+      backToSettings(res, `error:${err.message}`);
+    }
+  });
+  app.get('/auth/twitch/callback', async (req, res) => {
+    try {
+      await twitch.finishSignIn(req.query);
+      await twitch.refreshChannel();
+      backToSettings(res, 'connected');
+    } catch (err) {
+      backToSettings(res, `error:${err.message}`);
+    } finally {
+      io.emit('twitch', twitchMessage());
+    }
+  });
+
   app.get('/fonts/timer', (req, res) => {
     const font = store.getSettings().timerFont;
     if (!font) return res.sendStatus(404);
@@ -154,10 +192,37 @@ export function createApp(config) {
     socket.emit('settings', settingsMessage());
     socket.emit('timer', timerMessage());
     socket.emit('schedule', scheduleMessage());
+    socket.emit('twitch', twitchMessage());
 
     handle(socket, 'live:save', (payload) => commitLive(payload));
 
     handle(socket, 'schedule:refresh', () => scheduleSync.refresh());
+
+    handle(socket, 'twitch:settings', (payload) => {
+      twitch.saveSettings(payload ?? {});
+      io.emit('twitch', twitchMessage());
+      return {};
+    });
+
+    handle(socket, 'twitch:disconnect', async () => {
+      await twitch.disconnect();
+      io.emit('twitch', twitchMessage());
+      return {};
+    });
+
+    handle(socket, 'twitch:refresh', async () => {
+      await twitch.refreshChannel();
+      io.emit('twitch', twitchMessage());
+      return {};
+    });
+
+    handle(socket, 'twitch:update', async (payload) => {
+      const channel = await twitch.updateChannel(payload ?? {});
+      io.emit('twitch', twitchMessage());
+      return { channel };
+    });
+
+    handle(socket, 'twitch:search', async (payload) => ({ categories: await twitch.searchCategories(payload?.query) }));
 
     // Puts a run in Next Segment and the runs after it in Future runs, and follows the schedule.
     handle(socket, 'schedule:load', (payload) => {
@@ -188,6 +253,8 @@ export function createApp(config) {
       store.saveSettings({});
       removeFontFiles(store.fontsDir);
       store.setTimerFont(null);
+      twitch.reset();
+      io.emit('twitch', twitchMessage());
       textFiles.reset();
       const after = textFiles.clearAll(outputSettings());
       const errors = [...new Set([...before.errors, ...after.errors])];
@@ -250,11 +317,15 @@ export function createApp(config) {
     listen(port, host) {
       return new Promise((resolve) => server.listen(port, host, () => {
         scheduleSync.start();
+        pollTwitch();
+        twitchTimer = setInterval(pollTwitch, 60_000);
+        twitchTimer.unref?.();
         resolve(server.address());
       }));
     },
     close() {
       scheduleSync.stop();
+      clearInterval(twitchTimer);
       return new Promise((resolve) => io.close(() => resolve()));
     },
   };

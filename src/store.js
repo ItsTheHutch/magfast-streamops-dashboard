@@ -129,7 +129,7 @@ export function createStore(dataDir) {
       const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
       const folder = path.join(dataDir, 'backups', `${stamp}-${reason}`);
       fs.mkdirSync(folder, { recursive: true });
-      for (const file of [statePath, performersPath, settingsPath, schedulePath]) {
+      for (const file of [statePath, performersPath, settingsPath, schedulePath, path.join(dataDir, 'twitch.json')]) {
         if (fs.existsSync(file)) fs.copyFileSync(file, path.join(folder, path.basename(file)));
       }
       const fontsDir = path.join(dataDir, 'fonts');

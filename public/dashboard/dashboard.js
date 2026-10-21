@@ -23,6 +23,7 @@ import {
 } from '/shared/outputFiles.js';
 import { finishPlaces, formatTimer, timerElapsed } from '/shared/timer.js';
 import { setClockText, useTimerFont } from '/shared/clock.js';
+import { TITLE_MAX, fillTitle } from '/shared/twitchTitle.js';
 
 /* global io */
 const socket = io();
@@ -1220,7 +1221,7 @@ $('#schedule-reset').addEventListener('click', async () => {
 $('#reset-all').addEventListener('click', async () => {
   const confirmed = await confirmAction({
     title: 'Nuclear reset: erase all data and settings?',
-    body: 'Every performer, all segments and Future runs, the timer, the imported schedule, and every setting (Horaro, output folder, file locations, timer font) are erased, and every OBS text file is written blank. A backup copy is saved in data/backups first.',
+    body: 'Every performer, all segments and Future runs, the timer, the imported schedule, and every setting (Horaro, Twitch connection, output folder, file locations, timer font) are erased, and every OBS text file is written blank. A backup copy is saved in data/backups first.',
     confirm: 'Reset All Data',
     danger: true,
   });
@@ -1289,6 +1290,279 @@ $('#font-clear').addEventListener('click', async () => {
   }
 });
 
+/* ---------- Dashboard: Twitch title and category ---------- */
+
+let twitch = null;           // status from the server (never includes the secret or tokens)
+let shownChannel = null;     // the channel values the form was last filled from
+let chosenCategory = null;   // { id, name, boxArt } picked in the category search
+let searchTimer = null;
+let searchResults = [];
+let activeResult = -1;
+
+const twitchForm = $('#twitch-form');
+const categoryInput = $('#twitch-category');
+$('#twitch-art').addEventListener('error', (e) => { e.target.hidden = true; });
+
+function applyTwitch(status) {
+  twitch = status;
+  const connected = status.connected;
+  $('#twitch-panel').dataset.state = connected ? 'on' : 'off';
+  $('#twitch-off').hidden = connected;
+  twitchForm.hidden = !connected;
+  const channelLink = $('#twitch-channel');
+  channelLink.hidden = !connected;
+  if (connected) {
+    channelLink.textContent = `twitch.tv/${status.user.login}`;
+    channelLink.href = `https://twitch.tv/${status.user.login}`;
+  }
+  $('#twitch-error').textContent = status.error ?? '';
+  $('#twitch-error').hidden = !status.error;
+
+  // Fill the form from Twitch, leaving fields the operator is editing alone.
+  const channel = status.channel;
+  if (channel) {
+    const before = shownChannel;
+    if (!before || twitchForm.elements.title.value === before.title) twitchForm.elements.title.value = channel.title;
+    if (!before || (chosenCategory?.id ?? '') === before.gameId) {
+      chosenCategory = { id: channel.gameId, name: channel.gameName, boxArt: before?.gameId === channel.gameId ? chosenCategory?.boxArt : '' };
+      categoryInput.value = channel.gameName;
+    }
+    shownChannel = channel;
+  }
+  refreshTwitchForm();
+  applyTwitchSettings(status);
+}
+
+function refreshTwitchForm() {
+  if (!twitch?.connected || !shownChannel) return;
+  const title = twitchForm.elements.title;
+  const typed = categoryInput.value.trim();
+  // A typed category only counts once it's picked from the list; an empty box clears the category.
+  const category = typed === '' ? { id: '', name: '' } : chosenCategory && chosenCategory.name === typed ? chosenCategory : null;
+  const titleChanged = title.value.trim() !== shownChannel.title;
+  const categoryChanged = category ? category.id !== shownChannel.gameId : true;
+  title.classList.toggle('dirty', titleChanged);
+  categoryInput.classList.toggle('dirty', categoryChanged);
+  $('#twitch-count').textContent = `${title.value.length}/${TITLE_MAX}`;
+  $('#twitch-count').classList.toggle('over', title.value.length > TITLE_MAX);
+  $('#twitch-category-hint').textContent = category ? '' : 'Pick a category from the list.';
+  $('#twitch-art').hidden = !category?.boxArt;
+  if (category?.boxArt) $('#twitch-art').src = category.boxArt;
+  const valid = category && title.value.trim() && title.value.length <= TITLE_MAX;
+  $('#twitch-update').disabled = !(titleChanged || categoryChanged) || !valid || !socket.connected;
+  $('#twitch-revert').disabled = !(titleChanged || categoryChanged);
+}
+
+/* Category search: a combobox listing Twitch's matches as you type. */
+function showResults(results) {
+  searchResults = results;
+  activeResult = -1;
+  const list = $('#twitch-results');
+  list.replaceChildren(...results.map((result, i) => {
+    const li = document.createElement('li');
+    li.id = `twitch-result-${i}`;
+    li.setAttribute('role', 'option');
+    li.dataset.index = i;
+    // Box art comes from Twitch's image server; if it can't be loaded, leave it out.
+    if (result.boxArt) li.append(Object.assign(document.createElement('img'), { src: result.boxArt, alt: '', onerror: (e) => e.target.remove() }));
+    li.append(document.createTextNode(result.name));
+    return li;
+  }));
+  if (!results.length) {
+    const li = document.createElement('li');
+    li.className = 'combo-empty';
+    li.textContent = 'No matching categories.';
+    list.append(li);
+  }
+  list.hidden = false;
+  categoryInput.setAttribute('aria-expanded', 'true');
+}
+
+function closeResults() {
+  $('#twitch-results').hidden = true;
+  categoryInput.setAttribute('aria-expanded', 'false');
+  categoryInput.removeAttribute('aria-activedescendant');
+  activeResult = -1;
+}
+
+function pickCategory(result) {
+  chosenCategory = result;
+  categoryInput.value = result.name;
+  closeResults();
+  refreshTwitchForm();
+}
+
+async function searchCategories(query, { pickExact = false } = {}) {
+  if (!query.trim()) return closeResults();
+  try {
+    const { categories } = await request('twitch:search', { query }, 15000);
+    if (categoryInput.value.trim() !== query.trim()) return; // typed on since
+    const exact = categories.find((c) => c.name.toLowerCase() === query.trim().toLowerCase());
+    if (pickExact && exact) pickCategory(exact);
+    else showResults(categories);
+  } catch (err) {
+    toast(`Category search failed: ${err.message}`, 'error');
+  }
+}
+
+categoryInput.addEventListener('input', () => {
+  refreshTwitchForm();
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => searchCategories(categoryInput.value), 250);
+});
+
+categoryInput.addEventListener('keydown', (e) => {
+  const open = !$('#twitch-results').hidden && searchResults.length;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (!open) return;
+    e.preventDefault();
+    const step = e.key === 'ArrowDown' ? 1 : -1;
+    activeResult = (activeResult + step + searchResults.length) % searchResults.length;
+    $$('#twitch-results [role=option]').forEach((li, i) => li.setAttribute('aria-selected', String(i === activeResult)));
+    categoryInput.setAttribute('aria-activedescendant', `twitch-result-${activeResult}`);
+  } else if (e.key === 'Enter' && open && activeResult >= 0) {
+    e.preventDefault();
+    pickCategory(searchResults[activeResult]);
+  } else if (e.key === 'Escape') {
+    closeResults();
+  }
+});
+
+// mousedown, so the pick happens before the input loses focus and the list closes.
+$('#twitch-results').addEventListener('mousedown', (e) => {
+  const li = e.target.closest('[role=option]');
+  if (!li) return;
+  e.preventDefault();
+  pickCategory(searchResults[Number(li.dataset.index)]);
+});
+categoryInput.addEventListener('blur', () => setTimeout(closeResults, 100));
+
+twitchForm.elements.title.addEventListener('input', refreshTwitchForm);
+
+// Fills the title from the Live Segment, and for a run looks up its game as the category.
+$('#twitch-fill').addEventListener('click', () => {
+  if (!live || isEmptySegment(live.current)) return toast('Nothing is live yet.', 'warn');
+  twitchForm.elements.title.value = fillTitle(twitch.titleTemplate, live.current);
+  if (live.current.type === 'core' && live.current.name) {
+    categoryInput.value = live.current.name;
+    chosenCategory = null;
+    searchCategories(live.current.name, { pickExact: true });
+  }
+  refreshTwitchForm();
+  twitchForm.elements.title.focus();
+});
+
+$('#twitch-revert').addEventListener('click', () => {
+  twitchForm.elements.title.value = shownChannel.title;
+  categoryInput.value = shownChannel.gameName;
+  chosenCategory = { id: shownChannel.gameId, name: shownChannel.gameName, boxArt: '' };
+  closeResults();
+  refreshTwitchForm();
+});
+
+twitchForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if ($('#twitch-update').disabled) return;
+  const typed = categoryInput.value.trim();
+  const gameId = typed === '' ? '' : chosenCategory.id;
+  $('#twitch-update').disabled = true;
+  try {
+    const { channel } = await request('twitch:update', { title: twitchForm.elements.title.value, gameId }, 20000);
+    shownChannel = channel;
+    twitchForm.elements.title.value = channel.title;
+    categoryInput.value = channel.gameName;
+    chosenCategory = { ...chosenCategory, id: channel.gameId, name: channel.gameName };
+    toast('Twitch title and category updated.');
+  } catch (err) {
+    toast(`Twitch not updated: ${err.message}`, 'error');
+  } finally {
+    refreshTwitchForm();
+  }
+});
+
+/* ---------- Settings tab: Twitch ---------- */
+
+const twitchSettings = $('#twitch-settings');
+let twitchSettingsTouched = false;
+const onLocalhost = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+
+function applyTwitchSettings(status) {
+  const el = twitchSettings.elements;
+  $('#twitch-redirect').value = status.redirectUri;
+  $('#twitch-local-address').textContent = new URL(status.redirectUri).origin;
+  if (!twitchSettingsTouched) {
+    el.clientId.value = status.clientId;
+    el.clientSecret.value = '';
+    el.titleTemplate.value = status.titleTemplate;
+  }
+  el.clientSecret.placeholder = status.hasSecret ? 'Saved. Leave blank to keep it.' : '';
+
+  $('#twitch-connection').dataset.connected = String(status.connected);
+  $('#twitch-connection-text').textContent = status.connected
+    ? `Connected as ${status.user.displayName} (twitch.tv/${status.user.login}).`
+    : status.configured ? 'Not connected yet.' : 'Save the Client ID and Client Secret, then connect.';
+  const connect = $('#twitch-connect');
+  connect.textContent = status.connected ? 'Connect a different account' : 'Connect Twitch account';
+  connect.classList.toggle('is-disabled', !status.configured);
+  connect.setAttribute('aria-disabled', String(!status.configured));
+  $('#twitch-disconnect').hidden = !status.connected;
+  // Twitch only sends the sign-in back to the registered address, which is on the OBS PC.
+  const note = $('#twitch-localhost-note');
+  note.hidden = onLocalhost;
+  note.textContent = `You're using the dashboard from another computer. Twitch sends the sign-in back to ${new URL(status.redirectUri).origin}, so click Connect on the OBS PC itself.`;
+}
+
+twitchSettings.addEventListener('input', () => { twitchSettingsTouched = true; });
+
+$('#twitch-connect').addEventListener('click', (e) => {
+  if (!twitch?.configured) {
+    e.preventDefault();
+    toast('Save the Client ID and Client Secret first.', 'warn');
+  } else if (twitchSettingsTouched) {
+    e.preventDefault();
+    toast('Save your Twitch changes before connecting.', 'warn');
+  }
+});
+
+twitchSettings.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const el = twitchSettings.elements;
+  try {
+    await request('twitch:settings', { clientId: el.clientId.value, clientSecret: el.clientSecret.value, titleTemplate: el.titleTemplate.value });
+    twitchSettingsTouched = false;
+    applyTwitchSettings(twitch);
+    toast('Twitch settings saved.');
+  } catch (err) {
+    toast(`Twitch settings not saved: ${err.message}`, 'error');
+  }
+});
+
+$('#twitch-disconnect').addEventListener('click', async () => {
+  const confirmed = await confirmAction({
+    title: 'Disconnect the Twitch account?',
+    body: 'The Dashboard will stop being able to change the stream title and category until the account is connected again. The Client ID and Secret are kept.',
+    confirm: 'Disconnect',
+    danger: true,
+  });
+  if (!confirmed) return;
+  try {
+    await request('twitch:disconnect', undefined, 20000);
+    toast('Twitch account disconnected.');
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+});
+
+// Coming back from Twitch's sign-in page: say how it went, then tidy the address.
+{
+  const result = new URLSearchParams(location.search).get('twitch');
+  if (result) {
+    if (result === 'connected') toast('Twitch account connected.');
+    else toast(`Twitch not connected: ${result.replace(/^error:/, '')}`, 'error');
+    history.replaceState(null, '', location.pathname + location.hash);
+  }
+}
+
 /* ---------- Copy fields (OBS page addresses) ---------- */
 
 // The address as this browser reached the server, so it works from wherever the Dashboard does.
@@ -1318,7 +1592,7 @@ document.addEventListener('click', async (e) => {
   const label = $('span', button);
   button.dataset.copied = '';
   label.textContent = 'Copied';
-  toast('Timer address copied.');
+  toast(`${button.dataset.copyName ?? 'Address'} copied.`);
   clearTimeout(button.copyTimer);
   button.copyTimer = setTimeout(() => {
     delete button.dataset.copied;
@@ -1491,6 +1765,7 @@ socket.on('disconnect', () => {
 socket.on('live', applyLive);
 socket.on('settings', applySettings);
 socket.on('schedule', applyScheduleMessage);
+socket.on('twitch', applyTwitch);
 socket.on('timer', ({ serverNow: now, ...state }) => {
   clockOffset = now - Date.now();
   timer = state;

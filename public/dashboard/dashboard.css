@@ -35,6 +35,8 @@
   --fault: #ff6e6e;
   --on-air: #ff3b3b;
   --race: #ff7a1a;
+  --twitch: #9146ff;
+  --twitch-light: #bf94ff;
   /* Race placings: gold, silver, bronze, then steel blue for 4th (no medal). */
   --gold: #f2c94c;
   --silver: #cfd5de;
@@ -214,6 +216,7 @@ input.dirty, select.dirty { border-color: var(--staged); box-shadow: inset 4px 0
   border-radius: var(--radius-sm);
   cursor: pointer;
   white-space: nowrap;
+  text-decoration: none;
   transition: background-color .15s, border-color .15s, color .15s;
 }
 .btn:hover:not(:disabled) { border-color: var(--muted); }
@@ -638,6 +641,123 @@ kbd { font: inherit; font-size: .8rem; font-weight: 500; opacity: .65; }
 }
 .form-actions { display: flex; gap: 8px; justify-content: space-between; margin-top: 8px; }
 .muted { margin: 10px 0 0; font-size: .875rem; color: var(--muted); }
+
+/* ---------- Dashboard tab: Twitch ---------- */
+
+/* Twitch purple, deeper and bluer than the lavender used for Host/Interstitial. */
+.twitch-panel {
+  margin-bottom: 20px;
+  padding: 14px 20px 16px;
+  background: linear-gradient(90deg, rgba(145, 70, 255, .16), rgba(145, 70, 255, .05) 60%);
+  border: 1px solid rgba(145, 70, 255, .55);
+  border-left: 4px solid var(--twitch);
+  border-radius: var(--radius);
+}
+.twitch-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 8px; }
+.twitch-head h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--twitch-light);
+}
+.twitch-channel { font-size: .9rem; color: var(--muted); }
+.twitch-channel:hover { color: var(--text); }
+.twitch-error { flex-basis: 100%; margin: 4px 0 0; font-size: .9rem; color: var(--fault); }
+.twitch-off { margin: 0; color: var(--muted); }
+.twitch-off a { color: var(--twitch-light); }
+
+.twitch-form {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) auto;
+  gap: 0 12px;
+  align-items: start;
+}
+.twitch-form label { margin-bottom: 0; }
+.twitch-title { position: relative; }
+.twitch-count { align-self: flex-end; font-size: .8rem; color: var(--faint); }
+.twitch-count.over { color: var(--fault); font-weight: 600; }
+.twitch-category > label { margin-bottom: 6px; }
+.twitch-hint { display: block; min-height: 1.2em; margin-top: 4px; font-size: .8rem; color: var(--warn); }
+.twitch-actions { display: flex; gap: 8px; align-self: center; margin-top: 4px; }
+
+.btn.twitch-btn { color: #fff; background: var(--twitch); border-color: var(--twitch); }
+.btn.twitch-btn:hover:not(:disabled) { background: #a970ff; border-color: #a970ff; }
+.btn.twitch-btn.is-disabled { opacity: .45; cursor: not-allowed; }
+
+/* The category search: an input with the picked category's box art and a list of matches. */
+.combo { position: relative; }
+.combo input { padding-left: 12px; }
+.combo-art:not([hidden]) + input { padding-left: 40px; }
+.combo-art {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  width: 20px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 2px;
+  transform: translateY(-50%);
+}
+.combo-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 6;
+  max-height: 320px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  background: var(--raised);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
+}
+.combo-list [role=option] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.combo-list [role=option] img { width: 26px; height: 36px; object-fit: cover; border-radius: 2px; }
+.combo-list [role=option]:hover, .combo-list [aria-selected="true"] { background: rgba(145, 70, 255, .25); }
+.combo-empty { padding: 8px; color: var(--muted); }
+
+/* ---------- Settings tab: Twitch ---------- */
+
+.twitch-settings { max-width: 920px; margin-bottom: 40px; }
+.twitch-settings h2 {
+  margin: 0 0 6px;
+  font-family: var(--display);
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--twitch-light);
+}
+.twitch-settings > p { max-width: 72ch; margin: 0 0 12px; color: var(--muted); }
+.twitch-settings strong { color: var(--text); }
+.twitch-steps { max-width: 80ch; margin: 0 0 16px; padding-left: 22px; color: var(--muted); }
+.twitch-steps li { margin-bottom: 10px; }
+.twitch-steps a { color: var(--twitch-light); }
+.twitch-steps .copy-field { margin-top: 8px; }
+.twitch-creds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+.twitch-connection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 4px 0 12px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.twitch-connection p { flex: 1; min-width: 220px; margin: 0; }
+.twitch-connection[data-connected="true"] { border-color: rgba(145, 70, 255, .6); }
+.twitch-connection[data-connected="true"] p { color: var(--text); }
 
 /* ---------- Dashboard tab ---------- */
 
@@ -1232,6 +1352,9 @@ input.invalid { border-color: var(--fault); box-shadow: inset 4px 0 0 var(--faul
 @media (max-width: 1180px) {
   .slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dash { grid-template-columns: minmax(0, 1fr); }
+  .twitch-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .twitch-title { grid-column: 1 / -1; margin-bottom: 10px !important; }
+  .twitch-actions { justify-content: flex-end; }
   .segment-meta { grid-template-columns: minmax(0, 1fr) 150px; }
   .segment-meta .type-picker { grid-column: 1 / -1; max-width: 420px; }
   .future-row { grid-template-columns: 28px minmax(0, 2fr) minmax(0, 1.5fr) 150px; padding: 10px 0 0; }
@@ -1263,6 +1386,8 @@ input.invalid { border-color: var(--fault); box-shadow: inset 4px 0 0 var(--faul
   .savebar { bottom: 8px; flex-wrap: wrap; padding: 10px; }
   .settings-field { grid-template-columns: minmax(0, 1fr); }
   .schedule-columns-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .twitch-form, .twitch-creds { grid-template-columns: minmax(0, 1fr); }
+  .twitch-actions { flex-wrap: wrap; }
   .sched-head { flex-wrap: wrap; }
   .settings-field label { margin-bottom: 6px; }
   .field-error { grid-column: 1; }
