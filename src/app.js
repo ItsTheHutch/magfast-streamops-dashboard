@@ -18,7 +18,11 @@ import {
   unlink,
 } from './schedule.js';
 import { createTwitch } from './twitch.js';
+import { isEmptySegment } from '../public/shared/model.js';
 import { createAccessCheck, isLoopback } from './access.js';
+import { MacroError, macroAction } from './macros.js';
+import { RESET_WINDOW_MS } from '../public/shared/macros.js';
+import { timingSafeEqual } from 'node:crypto';
 import { FONT_TYPES, MAX_FONT_BYTES, checkFontUpload, fontPath, removeFontFiles, writeFontFile } from './timerFont.js';
 
 // Builds the HTTP + Socket.IO server without starting it, so tests can run it on a spare port.
@@ -33,6 +37,7 @@ export function createApp(config) {
   }
   const settingsMessage = () => ({
     ...store.getSettings(),
+    macroKey: store.getMacroKey(),
     defaultOutputDir: config.outputDir,
     resolvedOutputDir: outputSettings().outputDir,
   });
@@ -42,13 +47,26 @@ export function createApp(config) {
   // Performer slots with a runner in the Live Segment: the ones that can finish.
   const activeSlots = () => store.getLive().current.performers.flatMap((p, i) => (p.name ? [i] : []));
 
-  // Saves the live state, rewrites the OBS text files and tells every dashboard.
+  // Saves the live state, rewrites the OBS text files and tells every dashboard. If the Live
+  // Segment changed in a way the stream title could show, the Dashboard reminds the operator to
+  // update Twitch.
   function commitLive(next) {
+    const before = titleFields(store.getLive().current);
     const live = store.saveLive(next);
     const { errors } = textFiles.write(live, outputSettings());
     io.emit('live', live);
+    if (titleFields(live.current) !== before && !isEmptySegment(live.current)) {
+      twitch.remind(live.current.name);
+      io.emit('twitch', twitchMessage());
+    }
     return { warnings: errors };
   }
+
+  // The parts of a segment a stream title can use (not pronouns, for example).
+  const titleFields = (segment) => JSON.stringify([
+    segment.type, segment.name, segment.category, segment.estimate,
+    segment.performers.map((p) => [p.name, p.social.platform, p.social.handle]),
+  ]);
 
   /* Horaro schedule: imported on start and every few minutes (see src/schedule.js). */
   const defaultScheduleSettings = scheduleDefaults(config.horaro);
@@ -92,6 +110,13 @@ export function createApp(config) {
     const before = JSON.stringify(twitchMessage());
     await twitch.refreshChannel();
     if (JSON.stringify(twitchMessage()) !== before) io.emit('twitch', twitchMessage());
+  }
+
+  // Dashboard buttons and Stream Deck macros both go through here.
+  function runTimerAction(payload) {
+    const timer = applyTimerAction(store.getTimer(), payload, { now: Date.now(), activeSlots: activeSlots() });
+    store.saveTimer(timer);
+    io.emit('timer', timerMessage());
   }
 
   const startup = textFiles.write(store.getLive(), outputSettings());
@@ -162,6 +187,35 @@ export function createApp(config) {
     }
   });
 
+  // Stream Deck macros: GET or POST /api/macro/<id>?key=<key> (see src/macros.js). They're plain
+  // requests, which any web page could also make, so the key is what makes them safe.
+  let resetArmedUntil = 0;
+  const keyMatches = (given) => {
+    const expected = Buffer.from(store.getMacroKey());
+    const actual = Buffer.from(String(given ?? ''));
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  };
+  app.all('/api/macro/:id', (req, res) => {
+    const reply = (status, message) => res.status(status).json({ ok: status < 300, message, timer: store.getTimer().status });
+    if (!['GET', 'POST'].includes(req.method)) return reply(405, 'Use GET or POST.');
+    if (!keyMatches(req.query.key)) return reply(403, 'Wrong or missing key. Copy the address again from Settings.');
+    try {
+      const payload = macroAction(req.params.id, store.getTimer(), activeSlots());
+      if (!payload) return reply(404, `There's no "${req.params.id}" macro.`);
+      // Reset needs a second press within a few seconds, since a Stream Deck can't ask first.
+      if (payload.action === 'reset' && store.getTimer().status !== 'stopped' && Date.now() > resetArmedUntil) {
+        resetArmedUntil = Date.now() + RESET_WINDOW_MS;
+        io.emit('notice', { kind: 'warn', message: 'Stream Deck: press Reset again within 3 seconds to reset the timer.' });
+        return reply(202, 'Press Reset again within 3 seconds to reset the timer.');
+      }
+      resetArmedUntil = 0;
+      runTimerAction(payload);
+      return reply(200, 'Done.');
+    } catch (err) {
+      return reply(err instanceof MacroError ? err.status : 409, err.message);
+    }
+  });
+
   app.get('/fonts/timer', (req, res) => {
     const font = store.getSettings().timerFont;
     if (!font) return res.sendStatus(404);
@@ -174,8 +228,11 @@ export function createApp(config) {
 
   // Runs a socket request handler and replies through the client's ack callback.
   function handle(socket, event, handler) {
-    socket.on(event, async (payload, ack) => {
-      const reply = typeof ack === 'function' ? ack : () => {};
+    socket.on(event, async (...args) => {
+      // The reply callback is always last, so a request sent without a payload still gets an answer.
+      const ack = typeof args.at(-1) === 'function' ? args.pop() : null;
+      const payload = args[0];
+      const reply = ack ?? (() => {});
       try {
         reply({ ok: true, ...(await handler(payload)) });
       } catch (err) {
@@ -222,6 +279,12 @@ export function createApp(config) {
       return { channel };
     });
 
+    handle(socket, 'twitch:dismiss', () => {
+      twitch.dismissReminder();
+      io.emit('twitch', twitchMessage());
+      return {};
+    });
+
     handle(socket, 'twitch:search', async (payload) => ({ categories: await twitch.searchCategories(payload?.query) }));
 
     // Puts a run in Next Segment and the runs after it in Future runs, and follows the schedule.
@@ -251,6 +314,7 @@ export function createApp(config) {
       store.clearPerformers();
       store.clearLive();
       store.saveSettings({});
+      store.newMacroKey();
       removeFontFiles(store.fontsDir);
       store.setTimerFont(null);
       twitch.reset();
@@ -277,9 +341,13 @@ export function createApp(config) {
     });
 
     handle(socket, 'timer', (payload) => {
-      const timer = applyTimerAction(store.getTimer(), payload ?? {}, { now: Date.now(), activeSlots: activeSlots() });
-      store.saveTimer(timer);
-      io.emit('timer', timerMessage());
+      runTimerAction(payload ?? {});
+      return {};
+    });
+
+    handle(socket, 'macros:new-key', () => {
+      store.newMacroKey();
+      io.emit('settings', settingsMessage());
       return {};
     });
 

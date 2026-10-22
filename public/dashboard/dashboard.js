@@ -23,7 +23,8 @@ import {
 } from '/shared/outputFiles.js';
 import { finishPlaces, formatTimer, timerElapsed } from '/shared/timer.js';
 import { setClockText, useTimerFont } from '/shared/clock.js';
-import { TITLE_MAX, fillTitle } from '/shared/twitchTitle.js';
+import { TITLE_MAX, TITLE_PLACEHOLDERS, fillTitle, unknownPlaceholders } from '/shared/twitchTitle.js';
+import { MACROS } from '/shared/macros.js';
 
 /* global io */
 const socket = io();
@@ -267,6 +268,7 @@ function applyLive(next) {
   refreshRunStatus();
   renderDashboard();
   renderSchedule();
+  if (twitch) refreshTemplatePreview();
 }
 
 function slotFields(slot) {
@@ -1304,9 +1306,23 @@ const categoryInput = $('#twitch-category');
 $('#twitch-art').addEventListener('error', (e) => { e.target.hidden = true; });
 
 function applyTwitch(status) {
+  const firstStatus = twitch === null;
+  const previousReminder = twitch?.reminder?.at ?? null;
   twitch = status;
   const connected = status.connected;
   $('#twitch-panel').dataset.state = connected ? 'on' : 'off';
+
+  // The Live Segment changed since Twitch was last updated: highlight the box and say so.
+  const reminder = connected ? status.reminder : null;
+  $('#twitch-panel').dataset.reminder = String(Boolean(reminder));
+  $('#twitch-reminder').hidden = !reminder;
+  if (reminder) {
+    $('#twitch-reminder-text').textContent = `The Live Segment changed${reminder.segment ? ` to ${reminder.segment}` : ''}. Update the Twitch title and category to match.`;
+    // From another tab, point the operator to the Dashboard.
+    if (!firstStatus && reminder.at !== previousReminder && $('#tab-dashboard').hidden) {
+      toast('Live Segment changed: update the Twitch title on the Dashboard.', 'warn');
+    }
+  }
   $('#twitch-off').hidden = connected;
   twitchForm.hidden = !connected;
   const channelLink = $('#twitch-channel');
@@ -1452,6 +1468,10 @@ $('#twitch-fill').addEventListener('click', () => {
   twitchForm.elements.title.focus();
 });
 
+$('#twitch-dismiss').addEventListener('click', () => {
+  request('twitch:dismiss').catch((err) => toast(err.message, 'error'));
+});
+
 $('#twitch-revert').addEventListener('click', () => {
   twitchForm.elements.title.value = shownChannel.title;
   categoryInput.value = shownChannel.gameName;
@@ -1496,6 +1516,7 @@ function applyTwitchSettings(status) {
     el.titleTemplate.value = status.titleTemplate;
   }
   el.clientSecret.placeholder = status.hasSecret ? 'Saved. Leave blank to keep it.' : '';
+  refreshTemplatePreview();
 
   $('#twitch-connection').dataset.connected = String(status.connected);
   $('#twitch-connection-text').textContent = status.connected
@@ -1512,7 +1533,25 @@ function applyTwitchSettings(status) {
   note.textContent = `You're using the dashboard from another computer. Twitch sends the sign-in back to ${new URL(status.redirectUri).origin}, so click Connect on the OBS PC itself.`;
 }
 
-twitchSettings.addEventListener('input', () => { twitchSettingsTouched = true; });
+twitchSettings.addEventListener('input', () => {
+  twitchSettingsTouched = true;
+  refreshTemplatePreview();
+});
+
+// Under the template: an error for placeholders it can't fill, and the title it would make now.
+function refreshTemplatePreview() {
+  const template = twitchSettings.elements.titleTemplate.value;
+  const unknown = unknownPlaceholders(template);
+  const error = $('#twitch-template-error');
+  error.hidden = unknown.length === 0;
+  error.textContent = `${unknown.join(', ')} ${unknown.length > 1 ? 'aren\'t placeholders' : 'isn\'t a placeholder'}. Use ${TITLE_PLACEHOLDERS.map((p) => `{${p}}`).join(', ')}.`;
+  twitchSettings.elements.titleTemplate.classList.toggle('invalid', unknown.length > 0);
+  $('#twitch-save').disabled = unknown.length > 0;
+  const preview = $('#twitch-template-preview');
+  preview.textContent = live && !isEmptySegment(live.current)
+    ? `With the Live Segment now: ${fillTitle(template, live.current) || '(empty)'}`
+    : 'A preview appears here once something is live.';
+}
 
 $('#twitch-connect').addEventListener('click', (e) => {
   if (!twitch?.configured) {
@@ -1598,6 +1637,60 @@ document.addEventListener('click', async (e) => {
     delete button.dataset.copied;
     label.textContent = 'Copy';
   }, 2000);
+});
+
+/* ---------- Settings tab: Stream Deck ---------- */
+
+const COPY_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
+let shownMacroKey = null;
+
+// One row per macro: its name, a note, and its address with a Copy button.
+function renderMacros(key) {
+  if (key === shownMacroKey) return;
+  shownMacroKey = key;
+  $('#macro-list').replaceChildren(...MACROS.map((macro) => {
+    const row = document.createElement('div');
+    row.className = 'macro-row';
+    const id = `macro-${macro.id}`;
+    const about = document.createElement('div');
+    about.className = 'macro-about';
+    const label = document.createElement('label');
+    label.htmlFor = id;
+    label.textContent = macro.label;
+    about.append(label);
+    if (macro.note) about.append(Object.assign(document.createElement('small'), { textContent: macro.note }));
+    const field = document.createElement('div');
+    field.className = 'copy-field';
+    const input = Object.assign(document.createElement('input'), { id, readOnly: true, spellcheck: false });
+    input.value = new URL(`/api/macro/${macro.id}?key=${key}`, location.origin).href;
+    input.addEventListener('focus', () => input.select());
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'btn copy-btn';
+    copy.dataset.copy = id;
+    copy.dataset.copyName = `${macro.label} address`;
+    copy.setAttribute('aria-label', `Copy the ${macro.label} address`);
+    copy.innerHTML = `${COPY_ICON}<span>Copy</span>`;
+    field.append(input, copy);
+    row.append(about, field);
+    return row;
+  }));
+}
+
+$('#macro-new-key').addEventListener('click', async () => {
+  const confirmed = await confirmAction({
+    title: 'Generate a new Stream Deck key?',
+    body: 'Every address changes, so the buttons you\'ve already set up stop working until you paste in the new addresses.',
+    confirm: 'Generate new key',
+    danger: true,
+  });
+  if (!confirmed) return;
+  try {
+    await request('macros:new-key');
+    toast('New key generated. Update your Stream Deck buttons with the new addresses.');
+  } catch (err) {
+    toast(err.message, 'error');
+  }
 });
 
 /* ---------- Settings tab ---------- */
@@ -1706,6 +1799,7 @@ function applySettings({ defaultOutputDir, resolvedOutputDir, ...settings }) {
   }
   savedSettings = settings;
   applyTimerFont(settings.timerFont);
+  renderMacros(settings.macroKey);
   settingsForm.elements.outputDir.placeholder = defaultOutputDir;
   $('#settings-folder-note').textContent =
     `Leave blank to use the default. A relative path is inside the project folder. Files are currently written to ${resolvedOutputDir}`;
@@ -1766,6 +1860,8 @@ socket.on('live', applyLive);
 socket.on('settings', applySettings);
 socket.on('schedule', applyScheduleMessage);
 socket.on('twitch', applyTwitch);
+// Messages for every dashboard, like a Stream Deck Reset waiting for its second press.
+socket.on('notice', ({ message, kind }) => toast(message, kind));
 socket.on('timer', ({ serverNow: now, ...state }) => {
   clockOffset = now - Date.now();
   timer = state;

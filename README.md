@@ -57,7 +57,8 @@ The defaults live in `config/config.example.json`. To change any of them, copy t
 **Twitch (top of the Dashboard).** Shows the channel's current stream title and category as Twitch has them, checked every minute.
 
 - **Changing them:** edit the title (up to 140 characters), search for a category and pick it from the list, and click **Update Twitch**. Clear the category box to remove the category.
-- **Use Live Segment:** fills the title from the Live Segment using the title template in Settings. For a Core Content segment it also looks up the game as the category.
+- **Use Live Segment:** fills the title from the Live Segment using the title template in Settings, tagging performers as `@` and their social handle. For a Core Content segment it also looks up the game as the category.
+- **Reminder:** when the Live Segment changes in a way a title could show (name, category, estimate, type, or performers and their socials), the box turns amber and asks you to update Twitch. This happens whether the change was saved from Edit Segment or moved to Live from the Dashboard. It clears when you click **Update Twitch** or **Dismiss**.
 - **Before it works:** connect the channel's account in Settings.
 
 **Edit Segment tab.** The tab has three parts:
@@ -113,7 +114,7 @@ Typing or picking a name that's in the performer directory fills in that perform
 How it works:
 - **Signing in:** Twitch only returns the sign-in to the registered address, which uses `localhost`, so connecting has to be done on the OBS PC.
 - **What's stored:** the secret and sign-in tokens stay on the server in `data/twitch.json`. They're never sent to the browser, and are renewed automatically when they expire.
-- **Settings:** the title template uses `{name}`, `{category}`, `{performers}` and `{estimate}`. **Disconnect** signs the account out and keeps the Client ID and Secret.
+- **Settings:** the title template uses `{name}`, `{category}`, `{estimate}` and `{performers}` (`{@performers}` works too, and capitalization doesn't matter). `{performers}` becomes `@BlazeBops & @kirara`, using each performer's social handle, or their name if they have no handle or it's a website. Settings shows a preview of the title for the current Live Segment, and won't save a template with an unrecognized placeholder. **Disconnect** signs the account out and keeps the Client ID and Secret.
 
 **Settings tab: timer font.** Upload a `.woff2`, `.woff`, `.ttf` or `.otf` file of up to 10 MB to use for the timer. The file is kept in `data/fonts/`. **Use default font** switches back.
 
@@ -122,6 +123,24 @@ How it works:
 - **What it shows:** just the clock, on a transparent background, in the timer font. It fills whatever size you give the source and stays in step with the Dashboard.
 - **Changing its look:** use the Browser source's **Custom CSS**, for example `.clock { color: gold; text-align: left; }`.
 - **Status:** the page's `body` has `data-status="stopped|running|paused|finished"`, so you can style each state.
+
+**Settings tab: Stream Deck.** Run the timer from a Stream Deck or any tool that can send a web request.
+
+- **Setting up a button:** use the **Website** action, paste the action's address from Settings, and tick **Access in background**.
+- **Addresses:** each looks like `http://localhost:3000/api/macro/timer-toggle?key=…` and accepts GET or POST.
+
+| Action | Address ends in | Notes |
+|---|---|---|
+| Start / Pause / Resume | `timer-toggle` | One button for all three |
+| Start, Pause, Resume | `timer-start`, `timer-pause`, `timer-resume` | |
+| Finish | `timer-finish` | Ends the run. In Race Mode, use the runner actions. |
+| Finish runner 1–4 | `finish-runner-1` … `finish-runner-4` | Race Mode only |
+| Undo finish | `timer-undo-finish` | In Race Mode, undoes the most recent finish |
+| Reset | `timer-reset` | Press twice within 3 seconds. The first press replies `202` and every dashboard shows a reminder. |
+| Race Mode on/off | `race-mode` | Same rules as the switch |
+
+- **Replies:** `200` when an action worked, `409` when the timer can't do it right now (with the reason), and `403` for a wrong key.
+- **The key:** it stops other websites from triggering these. It's kept in `data/settings.json`, and **Generate new key** in Settings replaces it, as does the NUCLEAR RESET.
 
 **Settings tab: OBS text files.** Sets where each OBS text file is written, grouped the same way as Edit Segment.
 

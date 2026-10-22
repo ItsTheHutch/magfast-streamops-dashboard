@@ -35,6 +35,9 @@
   --fault: #ff6e6e;
   --on-air: #ff3b3b;
   --race: #ff7a1a;
+  /* Timer controls: green to go, amber to hold, red to stop. */
+  --go: #3ddc84;
+  --go-ink: #04210f;
   --twitch: #9146ff;
   --twitch-light: #bf94ff;
   /* Race placings: gold, silver, bronze, then steel blue for 4th (no medal). */
@@ -82,7 +85,9 @@ body {
   position: sticky;
   top: 0;
   z-index: 10;
-  display: flex;
+  /* Logo left, tabs in the middle of the page, connection status right. */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 32px;
   padding: 0 24px;
@@ -91,15 +96,20 @@ body {
   border-bottom: 1px solid var(--line);
 }
 .brand {
+  justify-self: start;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   font-family: var(--display);
   font-weight: 700;
   font-size: 1.45rem;
   letter-spacing: .01em;
   white-space: nowrap;
 }
-.brand span { font-weight: 500; color: var(--muted); }
+.brand-logo { display: block; width: auto; height: 32px; }
+.brand span { font-size: 2.4rem; line-height: 1; font-weight: 500; color: var(--muted); }
 
-.tabs { display: flex; gap: 4px; flex: 1; align-self: stretch; }
+.tabs { display: flex; justify-content: center; gap: 4px; align-self: stretch; }
 .tab {
   position: relative;
   min-height: 44px;
@@ -125,6 +135,7 @@ body {
 }
 
 .conn {
+  justify-self: end;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -648,11 +659,35 @@ kbd { font: inherit; font-size: .8rem; font-weight: 500; opacity: .65; }
 .twitch-panel {
   margin-bottom: 20px;
   padding: 14px 20px 16px;
-  background: linear-gradient(90deg, rgba(145, 70, 255, .16), rgba(145, 70, 255, .05) 60%);
-  border: 1px solid rgba(145, 70, 255, .55);
-  border-left: 4px solid var(--twitch);
+  background: rgba(145, 70, 255, .09);
+  border: 1px solid rgba(145, 70, 255, .6);
   border-radius: var(--radius);
+  transition: border-color .2s, box-shadow .2s, background-color .2s;
 }
+
+/* Reminder: the Live Segment changed, so the title probably needs updating. Amber, like unsaved edits. */
+.twitch-panel[data-reminder="true"] {
+  background: rgba(246, 180, 69, .07);
+  border-color: var(--staged);
+  box-shadow: 0 0 0 1px var(--staged), 0 0 24px rgba(246, 180, 69, .22);
+  animation: twitch-nudge 1.2s ease-out 2;
+}
+@keyframes twitch-nudge {
+  50% { box-shadow: 0 0 0 1px var(--staged), 0 0 36px rgba(246, 180, 69, .45); }
+}
+.twitch-reminder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: rgba(246, 180, 69, .12);
+  border-radius: var(--radius-sm);
+}
+.twitch-reminder p { margin: 0; font-weight: 600; color: var(--staged); }
+.twitch-panel[data-reminder="true"] #twitch-fill { color: var(--staged-ink); background: var(--staged); border-color: var(--staged); }
 .twitch-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 8px; }
 .twitch-head h2 {
   margin: 0;
@@ -744,6 +779,9 @@ kbd { font: inherit; font-size: .8rem; font-weight: 500; opacity: .65; }
 .twitch-steps a { color: var(--twitch-light); }
 .twitch-steps .copy-field { margin-top: 8px; }
 .twitch-creds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+.twitch-settings > .template-error { margin: -6px 0 6px; color: var(--fault); }
+.template-preview { margin: -4px 0 14px; font-size: .875rem; color: var(--muted); overflow-wrap: anywhere; }
+
 .twitch-connection {
   display: flex;
   flex-wrap: wrap;
@@ -932,9 +970,9 @@ kbd { font: inherit; font-size: .8rem; font-weight: 500; opacity: .65; }
 .timer[data-race="true"] .race-flag { display: block; }
 .timer[data-race="true"] :is(.timer-clock, .timer-head) { text-shadow: 0 2px 14px rgba(0, 0, 0, .85); }
 
-.timer[data-status="running"] .timer-status { color: var(--accent); }
-.timer[data-status="paused"] .timer-status { color: var(--warn); }
-.timer[data-status="finished"] .timer-status { color: var(--text); }
+.timer[data-status="running"] .timer-status { color: var(--go); }
+.timer[data-status="paused"] .timer-status { color: var(--staged); }
+.timer[data-status="finished"] .timer-status { color: var(--go); }
 
 .timer-clock {
   margin: 10px 0 20px;
@@ -943,14 +981,31 @@ kbd { font: inherit; font-size: .8rem; font-weight: 500; opacity: .65; }
   text-align: center;
   white-space: nowrap;
 }
-.timer[data-status="paused"] .timer-clock { color: var(--muted); }
-.timer[data-status="finished"] .timer-clock { color: var(--accent); }
+/* The time: white while running, amber while paused, green once finished. */
+.timer[data-status="paused"] .timer-clock { color: var(--staged); }
+.timer[data-status="finished"] .timer-clock { color: var(--go); }
 /* One "0" wide per digit, so the clock holds still as it counts. */
 .timer-clock .d { display: inline-block; width: 1ch; text-align: center; }
 .timer-clock .tenths { font-size: .5em; }
 
 .timer-controls { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
 .timer-btn { min-height: 52px; min-width: 120px; padding: 0 24px; font-size: 1.35rem; }
+
+/* Start/Resume green, Pause amber, Reset red. */
+.btn.go { color: var(--go-ink); background: var(--go); border-color: var(--go); }
+.btn.go:hover:not(:disabled) { background: #6be9a3; border-color: #6be9a3; }
+.btn.hold { color: var(--staged-ink); background: var(--staged); border-color: var(--staged); }
+.btn.hold:hover:not(:disabled) { background: var(--staged-hover); border-color: var(--staged-hover); }
+.btn.stop { color: #2a0606; background: var(--fault); border-color: var(--fault); }
+.btn.stop:hover:not(:disabled) { background: #ff8a8a; border-color: #ff8a8a; }
+
+/* Finish is a finish line: white with a checkered flag, so it can't be mistaken for go/hold/stop. */
+.btn.finish { color: #17181b; background: #f2f2f3; border-color: #f2f2f3; }
+.btn.finish:hover:not(:disabled) { background: #fff; border-color: #fff; }
+.flag-icon { flex: none; width: 1.1em; height: 1.1em; }
+.flag-icon .flag-pole { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.flag-icon .flag-cloth { fill: none; stroke: currentColor; stroke-width: 1; }
+.flag-icon rect:not(.flag-cloth) { fill: currentColor; }
 
 /* In a narrow timer panel, Race Mode drops onto its own line so it can't crowd the buttons. */
 @container (max-width: 700px) {
@@ -1222,6 +1277,35 @@ kbd { font: inherit; font-size: .8rem; font-weight: 500; opacity: .65; }
 .overlay-hint { max-width: 72ch; margin: 8px 0 0; font-size: .875rem; color: var(--muted); }
 .overlay-hint a { color: var(--accent); }
 
+/* ---------- Settings tab: Stream Deck ---------- */
+
+.macro-settings { max-width: 920px; margin-bottom: 40px; }
+.macro-settings h2 {
+  margin: 0 0 6px;
+  font-family: var(--display);
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+.macro-settings > p, .macro-steps { max-width: 72ch; margin: 0 0 12px; color: var(--muted); }
+.macro-steps { padding-left: 22px; }
+.macro-settings strong { color: var(--text); }
+.macro-list { display: grid; gap: 10px; margin: 16px 0; }
+.macro-row {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 6px 16px;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.macro-about label { margin: 0; font-weight: 600; color: var(--text); }
+.macro-about small { display: block; font-size: .8rem; color: var(--faint); }
+.macro-row .copy-field input { font-size: .85rem; }
+.macro-key { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.macro-key p { flex: 1; min-width: 260px; margin: 0; font-size: .875rem; color: var(--muted); }
+
 /* ---------- Settings tab ---------- */
 
 .settings { max-width: 920px; }
@@ -1349,6 +1433,19 @@ input.invalid { border-color: var(--fault); box-shadow: inset 4px 0 0 var(--faul
 
 /* ---------- Responsive ---------- */
 
+/* Too narrow to centre the tabs on the page without crowding the logo: centre them in the space between. */
+@media (max-width: 1100px) {
+  .topbar { display: flex; }
+  .tabs { flex: 1; }
+}
+
+/* Too narrow for logo, tabs and status on one row: the tabs get their own centred row underneath. */
+@media (max-width: 960px) {
+  .topbar { flex-wrap: wrap; gap: 0 16px; padding-top: 8px; }
+  .brand { flex: 1; }
+  .tabs { order: 3; flex-basis: 100%; }
+}
+
 @media (max-width: 1180px) {
   .slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dash { grid-template-columns: minmax(0, 1fr); }
@@ -1370,7 +1467,7 @@ input.invalid { border-color: var(--fault); box-shadow: inset 4px 0 0 var(--faul
 @media (max-width: 700px) {
   .topbar { flex-wrap: wrap; gap: 0 16px; padding: 8px 16px 0; }
   .brand { flex: 1; }
-  .tabs { order: 3; flex-basis: 100%; margin-left: -14px; overflow-x: auto; scrollbar-width: none; }
+  .tabs { order: 3; flex-basis: 100%; justify-content: flex-start; margin-left: -14px; overflow-x: auto; scrollbar-width: none; }
   .tab { white-space: nowrap; }
   main { padding: 20px 16px 16px; }
   .slots, .segment-meta, .future-row { grid-template-columns: minmax(0, 1fr); }
@@ -1386,6 +1483,7 @@ input.invalid { border-color: var(--fault); box-shadow: inset 4px 0 0 var(--faul
   .savebar { bottom: 8px; flex-wrap: wrap; padding: 10px; }
   .settings-field { grid-template-columns: minmax(0, 1fr); }
   .schedule-columns-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .macro-row { grid-template-columns: minmax(0, 1fr); }
   .twitch-form, .twitch-creds { grid-template-columns: minmax(0, 1fr); }
   .twitch-actions { flex-wrap: wrap; }
   .sched-head { flex-wrap: wrap; }

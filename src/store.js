@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { normalizeDirectoryEntry, normalizeLive, sameName } from '../public/shared/model.js';
 import { normalizeOutputSettings } from '../public/shared/outputFiles.js';
 import { emptyTimer, normalizeTimer } from '../public/shared/timer.js';
@@ -135,6 +135,18 @@ export function createStore(dataDir) {
       const fontsDir = path.join(dataDir, 'fonts');
       if (fs.existsSync(fontsDir)) fs.cpSync(fontsDir, path.join(folder, 'fonts'), { recursive: true });
       return folder;
+    },
+
+    // The key in Stream Deck macro addresses. Made the first time it's needed.
+    getMacroKey() {
+      if (!settings.macroKey) this.newMacroKey();
+      return settings.macroKey;
+    },
+
+    newMacroKey() {
+      settings = { ...settings, macroKey: randomBytes(16).toString('hex') };
+      writeJsonAtomic(settingsPath, settings);
+      return settings.macroKey;
     },
 
     setTimerFont(font) {

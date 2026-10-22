@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>magFAST StreamOps</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/img/favicon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/img/favicon-180.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
@@ -11,7 +14,7 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">magFAST <span>StreamOps</span></div>
+    <div class="brand"><img class="brand-logo" src="img/magfast-logo.png" alt="magFAST" width="92" height="32"><span>StreamOps</span></div>
     <nav class="tabs" role="tablist">
       <button class="tab" role="tab" data-tab="dashboard">Dashboard</button>
       <button class="tab" role="tab" data-tab="edit">Edit Segment</button>
@@ -32,6 +35,10 @@
           <a class="twitch-channel" id="twitch-channel" target="_blank" rel="noopener" hidden></a>
           <p class="twitch-error" id="twitch-error" role="alert" hidden></p>
         </header>
+        <div class="twitch-reminder" id="twitch-reminder" role="status" hidden>
+          <p id="twitch-reminder-text"></p>
+          <button type="button" id="twitch-dismiss" class="btn small">Dismiss</button>
+        </div>
         <p class="twitch-off" id="twitch-off">Connect the channel's Twitch account in <a href="#settings" data-goto="settings">Settings</a> to change the stream title and category from here.</p>
         <form class="twitch-form" id="twitch-form" autocomplete="off" novalidate hidden>
           <label class="twitch-title">Stream title
@@ -108,12 +115,12 @@
             <div class="timer-clock timer-face" id="timer-clock" role="timer" aria-label="Timer"></div>
             <div class="timer-foot">
             <div class="timer-controls">
-              <button type="button" id="timer-start" class="btn primary timer-btn" disabled>Start</button>
-              <button type="button" id="timer-pause" class="btn timer-btn" hidden>Pause</button>
-              <button type="button" id="timer-resume" class="btn primary timer-btn" hidden>Resume</button>
-              <button type="button" id="timer-finish" class="btn primary timer-btn" hidden>Finish</button>
+              <button type="button" id="timer-start" class="btn timer-btn go" disabled>Start</button>
+              <button type="button" id="timer-pause" class="btn timer-btn hold" hidden>Pause</button>
+              <button type="button" id="timer-resume" class="btn timer-btn go" hidden>Resume</button>
+              <button type="button" id="timer-finish" class="btn timer-btn finish" hidden><svg class="flag-icon" viewBox="0 0 24 24" aria-hidden="true"><path class="flag-pole" d="M5 3v18"/><rect class="flag-cloth" x="6" y="4" width="14" height="9"/><rect x="6.0" y="4" width="3.5" height="3"/><rect x="13.0" y="4" width="3.5" height="3"/><rect x="9.5" y="7" width="3.5" height="3"/><rect x="16.5" y="7" width="3.5" height="3"/><rect x="6.0" y="10" width="3.5" height="3"/><rect x="13.0" y="10" width="3.5" height="3"/></svg>Finish</button>
               <button type="button" id="timer-unfinish" class="btn timer-btn" hidden>Undo finish</button>
-              <button type="button" id="timer-reset" class="btn timer-btn" disabled>Reset</button>
+              <button type="button" id="timer-reset" class="btn timer-btn stop" disabled>Reset</button>
             </div>
             <button type="button" id="timer-race" class="race-toggle" aria-pressed="false" hidden>Race Mode</button>
             </div>
@@ -285,7 +292,9 @@
           <label>Client ID<input name="clientId" spellcheck="false"></label>
           <label>Client Secret<input name="clientSecret" type="password" autocomplete="new-password" spellcheck="false"></label>
         </div>
-        <label>Title template <small>Used by Use Live Segment on the Dashboard. You can use {name}, {category}, {performers} and {estimate}.</small><input name="titleTemplate" spellcheck="false"></label>
+        <label>Title template <small>Used by Use Live Segment on the Dashboard. You can use {name}, {category}, {estimate} and {performers} (or {@performers}), which tags each performer as @ and their social handle, or uses their name if they don't have one.</small><input name="titleTemplate" spellcheck="false" aria-describedby="twitch-template-error twitch-template-preview"></label>
+        <p class="field-error template-error" id="twitch-template-error" hidden></p>
+        <p class="template-preview" id="twitch-template-preview"></p>
         <div class="twitch-connection" id="twitch-connection" data-connected="false">
           <p id="twitch-connection-text"></p>
           <a id="twitch-connect" class="btn twitch-btn" href="/auth/twitch/start">Connect Twitch account</a>
@@ -319,6 +328,22 @@
             </button>
           </div>
           <p class="overlay-hint">In OBS, add a <strong>Browser</strong> source with this address. It shows just the clock, on a transparent background, in the font above, and fills the size you give the source. <a id="timer-url-open" target="_blank" rel="noopener">Open it in a new tab</a></p>
+        </div>
+      </section>
+
+      <section class="macro-settings" aria-labelledby="macro-title">
+        <h2 id="macro-title">Stream Deck</h2>
+        <p>Run the timer from a Stream Deck. For each button:</p>
+        <ol class="macro-steps">
+          <li>Add a <strong>Website</strong> action (in the System category).</li>
+          <li>Paste one of the addresses below as its URL.</li>
+          <li>Tick <strong>Access in background</strong>, so it doesn't open a browser.</li>
+        </ol>
+        <p>The button shows a checkmark when it worked, and an alert when the timer can't do that right now (like Pause when it isn't running). Other HTTP tools, such as Bitfocus Companion, can use the same addresses with GET or POST.</p>
+        <div class="macro-list" id="macro-list"></div>
+        <div class="macro-key">
+          <p>The key at the end of each address stops other websites from pressing these for you. If an address gets shared, generate a new key, then paste the new addresses into your buttons.</p>
+          <button type="button" id="macro-new-key" class="btn danger">Generate new key</button>
         </div>
       </section>
 
@@ -410,7 +435,7 @@
       </div>
       <p class="runner-time timer-face"></p>
       <div class="runner-actions">
-        <button type="button" class="btn primary" data-finish>Finish</button>
+        <button type="button" class="btn finish" data-finish><svg class="flag-icon" viewBox="0 0 24 24" aria-hidden="true"><path class="flag-pole" d="M5 3v18"/><rect class="flag-cloth" x="6" y="4" width="14" height="9"/><rect x="6.0" y="4" width="3.5" height="3"/><rect x="13.0" y="4" width="3.5" height="3"/><rect x="9.5" y="7" width="3.5" height="3"/><rect x="16.5" y="7" width="3.5" height="3"/><rect x="6.0" y="10" width="3.5" height="3"/><rect x="13.0" y="10" width="3.5" height="3"/></svg>Finish</button>
         <button type="button" class="btn small" data-unfinish>Undo finish</button>
       </div>
     </div>

@@ -7,7 +7,7 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { cleanText } from '../public/shared/model.js';
 import { readJson, writeJsonAtomic } from './store.js';
-import { DEFAULT_TITLE_TEMPLATE, TITLE_MAX } from '../public/shared/twitchTitle.js';
+import { DEFAULT_TITLE_TEMPLATE, TITLE_MAX, TITLE_PLACEHOLDERS, unknownPlaceholders } from '../public/shared/twitchTitle.js';
 
 export { DEFAULT_TITLE_TEMPLATE, TITLE_MAX, fillTitle } from '../public/shared/twitchTitle.js';
 
@@ -30,6 +30,7 @@ export function createTwitch({ dataDir, config = {}, port = 3000 }) {
   let saved = readJson(file, {}) ?? {};
   let channel = null;  // { title, gameId, gameName } as last read from Twitch
   let error = null;    // the last problem, shown on the Dashboard and in Settings
+  let reminder = null; // { segment, at }: the Live Segment changed since the title was last updated
   const states = new Map(); // sign-in attempts in progress: state → expiry time
 
   const clientId = () => saved.clientId || config.clientId || '';
@@ -111,10 +112,25 @@ export function createTwitch({ dataDir, config = {}, port = 3000 }) {
         redirectUri,
         titleTemplate: saved.titleTemplate ?? DEFAULT_TITLE_TEMPLATE,
         titleMax: TITLE_MAX,
+        reminder,
       };
     },
 
+    // Asks the operator to update Twitch for the new Live Segment, until they do or dismiss it.
+    remind(segmentName) {
+      reminder = { segment: segmentName, at: Date.now() };
+    },
+
+    dismissReminder() {
+      reminder = null;
+    },
+
     saveSettings({ clientId: id, clientSecret: secret, titleTemplate }) {
+      const unknown = unknownPlaceholders(titleTemplate ?? '');
+      if (unknown.length) {
+        const known = TITLE_PLACEHOLDERS.map((p) => `{${p}}`).join(', ');
+        throw new TwitchError(`The title template has ${unknown.join(', ')}, which ${unknown.length > 1 ? 'aren\'t placeholders' : 'isn\'t a placeholder'}. Use ${known}.`);
+      }
       const newId = cleanText(id, 100);
       if (newId !== clientId() && saved.accessToken) forgetTokens();
       saved = {
@@ -191,6 +207,7 @@ export function createTwitch({ dataDir, config = {}, port = 3000 }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: newTitle, game_id: cleanText(gameId, 40) }),
       });
+      reminder = null;
       await this.refreshChannel();
       return channel;
     },
@@ -207,6 +224,7 @@ export function createTwitch({ dataDir, config = {}, port = 3000 }) {
       saved = {};
       channel = null;
       error = null;
+      reminder = null;
       fs.rmSync(file, { force: true });
     },
     file,

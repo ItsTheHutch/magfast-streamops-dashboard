@@ -7,6 +7,7 @@ import path from 'node:path';
 import { io as connect } from 'socket.io-client';
 import { createApp } from '../src/app.js';
 import { DEFAULT_TITLE_TEMPLATE, fillTitle } from '../src/twitch.js';
+import { unknownPlaceholders } from '../public/shared/twitchTitle.js';
 
 const segment = (fields) => ({ name: '', category: '', estimate: '', performers: [], ...fields });
 
@@ -16,6 +17,25 @@ test('fillTitle fills the template and drops empty parts', () => {
   assert.equal(fillTitle(DEFAULT_TITLE_TEMPLATE, segment({ name: 'Host chat' })), 'magFAST: Host chat');
   assert.equal(fillTitle('Lobby {name} by {performers}', segment({ name: 'Z' })), 'Lobby Z');
   assert.equal(fillTitle('{name}', segment({ name: 'x'.repeat(200) })).length, 140);
+});
+
+test('performers are tagged with @ and their social handle, or named when they have none', () => {
+  const performers = [
+    { name: 'BlazeBops', social: { platform: 'twitch', handle: 'BlazeBops' } },
+    { name: 'Kirara', social: { platform: 'youtube', handle: 'kirara_runs' } },
+    { name: 'Site Owner', social: { platform: 'web', handle: 'example.com' } },
+    { name: 'NoSocial', social: { platform: '', handle: '' } },
+  ];
+  assert.equal(fillTitle('{name} by {performers}', segment({ name: 'Race', performers })), 'Race by @BlazeBops, @kirara_runs, Site Owner & NoSocial');
+  // {@performers} reads naturally too, and placeholders ignore case.
+  assert.equal(fillTitle('{name} by {@performers}', segment({ name: 'Race', performers })), 'Race by @BlazeBops, @kirara_runs, Site Owner & NoSocial');
+  assert.equal(fillTitle('{Name} | {@Performers}', segment({ name: 'Race', performers: performers.slice(0, 1) })), 'Race | @BlazeBops');
+  assert.equal(fillTitle('magFAST: {name} by {@performers}', segment({ name: 'Host chat' })), 'magFAST: Host chat');
+});
+
+test('unknownPlaceholders finds placeholders the template can\'t fill', () => {
+  assert.deepEqual(unknownPlaceholders('{name} by {@performers} ({category}) {estimate}'), []);
+  assert.deepEqual(unknownPlaceholders('{name} by {runners} {game}'), ['{runners}', '{game}']);
 });
 
 // A stand-in for Twitch's sign-in (id.twitch.tv) and Helix API.
@@ -132,4 +152,37 @@ test('connecting a Twitch account and updating the title and category', async (t
   status = await until((s) => s && !s.connected);
   assert.equal(status.configured, true, 'the app credentials are kept');
   assert.deepEqual(twitch.state.revoked, ['at2']);
+});
+
+test('changing the Live Segment raises a reminder to update Twitch, until dismissed', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'magfast-remind-'));
+  const app = createApp({ dataDir: path.join(root, 'data'), outputDir: path.join(root, 'output') });
+  const { port } = await app.listen(0, '127.0.0.1');
+  const client = connect(`http://127.0.0.1:${port}`, { transports: ['websocket'] });
+  t.after(async () => {
+    client.close();
+    await app.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  let status = null;
+  client.on('twitch', (s) => { status = s; });
+  const request = (event, payload) => client.timeout(5000).emitWithAck(event, payload);
+  const live = (performer) => ({ current: { type: 'core', name: 'Mega Man X', performers: [performer] } });
+  while (!status) await new Promise((r) => setTimeout(r, 10));
+  assert.equal(status.reminder, null);
+
+  await request('live:save', live({ name: 'BlazeBops', pronouns: 'she/her' }));
+  assert.equal(status.reminder?.segment, 'Mega Man X');
+  const first = status.reminder.at;
+
+  await request('twitch:dismiss');
+  assert.equal(status.reminder, null);
+
+  // Pronouns aren't part of a title, so changing them doesn't ask again.
+  await request('live:save', live({ name: 'BlazeBops', pronouns: 'they/them' }));
+  assert.equal(status.reminder, null);
+
+  // A new social handle is.
+  await request('live:save', live({ name: 'BlazeBops', pronouns: 'they/them', social: { platform: 'twitch', handle: 'BlazeBops' } }));
+  assert.ok(status.reminder.at >= first);
 });
