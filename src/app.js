@@ -369,6 +369,14 @@ export function createApp(config) {
       return { performer: entry };
     });
 
+    // A spreadsheet import, read and previewed in the browser. A backup is made first.
+    handle(socket, 'performers:import', (payload) => {
+      if (store.getPerformers().length) store.backup('performer-import');
+      const counts = store.importPerformers(payload?.performers, { updateExisting: payload?.updateExisting !== false });
+      io.emit('performers', store.getPerformers());
+      return counts;
+    });
+
     handle(socket, 'performers:delete', (payload) => {
       store.deletePerformer(payload?.id);
       io.emit('performers', store.getPerformers());

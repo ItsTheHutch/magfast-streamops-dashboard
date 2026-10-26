@@ -25,12 +25,16 @@ import { finishPlaces, formatTimer, timerElapsed } from '/shared/timer.js';
 import { setClockText, useTimerFont } from '/shared/clock.js';
 import { TITLE_MAX, TITLE_PLACEHOLDERS, fillTitle, unknownPlaceholders } from '/shared/twitchTitle.js';
 import { MACROS } from '/shared/macros.js';
+import { SPREADSHEET_TYPES, SpreadsheetError, readSpreadsheet } from '/shared/spreadsheet.js';
+import { TEMPLATE_CSV, performersFromRows, planImport } from '/shared/performerImport.js';
 
 /* global io */
 const socket = io();
 
 let live = null;        // last saved state from the server
 let directory = [];     // performer directory
+let directoryLoaded = false; // the directory has arrived from the server
+let addingByHand = false;    // the directory is empty, but the operator chose to add a performer by hand
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -541,7 +545,8 @@ function renderDirectory() {
     name.textContent = p.name;
     const meta = document.createElement('span');
     meta.className = 'dir-meta';
-    for (const text of [p.pronouns, formatSocial(p.social)].filter(Boolean)) {
+    // Both are always there, blank or not, so they line up in columns.
+    for (const text of [p.pronouns, formatSocial(p.social)]) {
       const part = document.createElement('span');
       part.textContent = text;
       meta.append(part);
@@ -553,7 +558,15 @@ function renderDirectory() {
   // Rebuilding the list drops focus, so put it back on the same performer.
   if (focusedId) [...list.children].find((li) => li.dataset.id === focusedId)?.firstElementChild.focus();
 
-  $('#dir-count').textContent = directory.length === 1 ? '1 performer' : `${directory.length} performers`;
+  // An empty directory offers an import, front and centre, instead of an empty list.
+  const empty = directoryLoaded && !directory.length && !addingByHand;
+  $('#dir-empty').hidden = !empty;
+  $('#tab-performers .directory').hidden = empty;
+
+  const count = directory.length === 1 ? '1 performer' : `${directory.length} performers`;
+  $('#dir-count').textContent = !directory.length
+    ? 'No performers yet. Fill in the form to add the first one.'
+    : !shown.length ? `No performers match "${$('#dir-search').value.trim()}". ${count} in total.` : count;
   $('#directory-names').replaceChildren(...directory.map((p) => new Option(p.name)));
 }
 
@@ -607,6 +620,140 @@ $('#dir-delete').addEventListener('click', async () => {
     editPerformer(null);
   } catch (err) {
     toast(err.message, 'error');
+  }
+});
+
+$('#dir-add-manual').addEventListener('click', () => {
+  addingByHand = true;
+  editPerformer(null);
+  dirForm.elements.name.focus();
+});
+
+/* ---------- Performer import ---------- */
+
+// Read and previewed here; the server saves it. Used by the empty Performers tab and by Settings.
+const importDialog = $('#import-dialog');
+const importChoice = () => $('form', importDialog).elements.existing;
+let pendingImport = null; // { fileName, performers: [{ row, performer }], skipped: [{ row, name, reason }] }
+
+for (const link of $$('.template-link')) link.href = `data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${TEMPLATE_CSV}`)}`;
+
+for (const zone of $$('[data-import-zone]')) {
+  const input = $('input[type=file]', zone);
+  input.accept = SPREADSHEET_TYPES;
+  zone.addEventListener('click', (e) => {
+    if (e.target !== input) input.click();
+  });
+  input.addEventListener('change', () => {
+    if (input.files[0]) importFile(input.files[0]);
+    input.value = '';
+  });
+  zone.addEventListener('dragover', (e) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    zone.dataset.over = '';
+  });
+  zone.addEventListener('dragleave', (e) => {
+    if (!zone.contains(e.relatedTarget)) delete zone.dataset.over;
+  });
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    delete zone.dataset.over;
+    if (e.dataTransfer.files[0]) importFile(e.dataTransfer.files[0]);
+  });
+}
+// A file dropped anywhere else would make the browser open it and leave the dashboard.
+for (const type of ['dragover', 'drop']) {
+  addEventListener(type, (e) => {
+    if (e.dataTransfer?.types.includes('Files') && !e.target.closest?.('[data-import-zone]')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'none';
+    }
+  });
+}
+
+async function importFile(file) {
+  try {
+    const rows = await readSpreadsheet(file.name, await file.arrayBuffer());
+    pendingImport = { fileName: file.name, ...performersFromRows(rows) };
+  } catch (err) {
+    const reason = err instanceof SpreadsheetError ? err.message : 'It couldn\'t be read as a spreadsheet. Save it as .xlsx or .csv and try again.';
+    toast(`${file.name} wasn't imported. ${reason}`, 'error');
+    return;
+  }
+  if (!pendingImport.performers.length) {
+    toast(`${file.name} has headings but no performers under them.`, 'error');
+    return;
+  }
+  importChoice().value = 'update';
+  renderImportPreview();
+  importDialog.returnValue = '';
+  importDialog.showModal();
+}
+
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+function renderImportPreview() {
+  const updateExisting = importChoice().value === 'update';
+  const plan = planImport(pendingImport.performers.map((p) => p.performer), directory, { updateExisting });
+  const count = (status) => plan.filter((p) => p.status === status).length;
+  const toAdd = count('new');
+  const toUpdate = count('update');
+  const matched = plan.filter((p) => p.changes).length;
+
+  $('#import-dialog-title').textContent = `Import performers from ${pendingImport.fileName}`;
+  $('#import-summary').textContent = [
+    toAdd && plural(toAdd, 'new performer'),
+    toUpdate && `${plural(toUpdate, 'performer')} to update`,
+    count('keep') && `${plural(count('keep'), 'performer')} kept as they are`,
+    count('same') && `${count('same')} already up to date`,
+    pendingImport.skipped.length && `${plural(pendingImport.skipped.length, 'row')} skipped`,
+  ].filter(Boolean).join(', ') + '.';
+  $('#import-existing').hidden = !matched;
+
+  const results = {
+    new: () => ['New', 'new'],
+    update: (item) => [`Updates ${item.changes.join(' and ')}`, 'update'],
+    keep: () => ['Kept as is', 'same'],
+    same: () => ['Already up to date', 'same'],
+  };
+  const lines = [
+    ...pendingImport.performers.map(({ row, performer }, i) => ({ row, performer, result: results[plan[i].status](plan[i]) })),
+    ...pendingImport.skipped.map(({ row, name, reason }) => ({ row, performer: { name, pronouns: '', social: {} }, result: [`Skipped: ${reason.toLowerCase()}`, 'skip'] })),
+  ].sort((a, b) => a.row - b.row);
+
+  $('#import-rows').replaceChildren(...lines.map(({ row, performer, result: [text, kind] }) => {
+    const tr = document.createElement('tr');
+    if (kind === 'skip') tr.className = 'skipped';
+    for (const value of [row, performer.name || 'No name', performer.pronouns, formatSocial(performer.social)]) {
+      tr.append(Object.assign(document.createElement('td'), { textContent: value }));
+    }
+    tr.append(Object.assign(document.createElement('td'), { className: `import-result ${kind}`, textContent: text }));
+    return tr;
+  }));
+
+  const total = toAdd + toUpdate;
+  const ok = $('#import-ok');
+  ok.disabled = !total;
+  ok.textContent = !total ? 'Nothing to import' : !toUpdate ? `Add ${plural(toAdd, 'performer')}` : !toAdd ? `Update ${plural(toUpdate, 'performer')}` : `Import ${plural(total, 'performer')}`;
+}
+
+importDialog.addEventListener('change', (e) => {
+  if (e.target.name === 'existing') renderImportPreview();
+});
+
+importDialog.addEventListener('close', async () => {
+  if (importDialog.returnValue !== 'confirm' || !pendingImport) return;
+  const performers = pendingImport.performers.map((p) => p.performer);
+  const updateExisting = importChoice().value === 'update';
+  pendingImport = null;
+  try {
+    const { added, updated } = await request('performers:import', { performers, updateExisting });
+    const done = [added && `added ${plural(added, 'performer')}`, updated && `updated ${updated}`].filter(Boolean).join(' and ');
+    toast(done ? `${done[0].toUpperCase()}${done.slice(1)}.` : 'Nothing changed: everyone was already up to date.');
+  } catch (err) {
+    toast(`Import failed: ${err.message}`, 'error');
   }
 });
 
@@ -1693,6 +1840,34 @@ $('#macro-new-key').addEventListener('click', async () => {
   }
 });
 
+/* ---------- Settings tab: section list ---------- */
+
+const sectionLinks = $$('.settings-nav a');
+const sectionCard = (link) => document.getElementById(link.dataset.section).closest('.setting-card, .danger-zone');
+
+for (const link of sectionLinks) {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    sectionCard(link).scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  });
+}
+
+// Highlights the section being read: the last card whose top has passed a line a third of the way down.
+function markCurrentSection() {
+  if ($('#tab-settings').hidden) return;
+  const line = innerHeight / 3;
+  const atBottom = innerHeight + scrollY >= document.documentElement.scrollHeight - 4;
+  let current = sectionLinks[0];
+  for (const link of sectionLinks) if (sectionCard(link).getBoundingClientRect().top <= line) current = link;
+  if (atBottom) current = sectionLinks.at(-1);
+  for (const link of sectionLinks) link.setAttribute('aria-current', String(link === current));
+}
+addEventListener('scroll', markCurrentSection, { passive: true });
+addEventListener('resize', markCurrentSection);
+document.addEventListener('tabchange', markCurrentSection);
+markCurrentSection();
+
 /* ---------- Settings tab ---------- */
 
 const settingsForm = $('#settings-form');
@@ -1870,6 +2045,9 @@ socket.on('timer', ({ serverNow: now, ...state }) => {
 });
 socket.on('performers', (list) => {
   directory = list;
+  directoryLoaded = true;
+  if (directory.length) addingByHand = false;
+  if ($('#import-dialog').open) renderImportPreview();
   if (selectedId && !directory.some((p) => p.id === selectedId)) editPerformer(null);
   else renderDirectory();
   refreshDirectoryBadges();

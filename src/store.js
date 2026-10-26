@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { normalizeDirectoryEntry, normalizeLive, sameName } from '../public/shared/model.js';
+import { normalizeDirectoryEntry, normalizeLive, normalizePerformer, sameName } from '../public/shared/model.js';
+import { MAX_IMPORT, planImport } from '../public/shared/performerImport.js';
 import { normalizeOutputSettings } from '../public/shared/outputFiles.js';
 import { emptyTimer, normalizeTimer } from '../public/shared/timer.js';
 import { normalizeTimerFont } from './timerFont.js';
@@ -175,6 +176,27 @@ export function createStore(dataDir) {
       }
       persistPerformers();
       return entry;
+    },
+
+    // Adds new performers and, with updateExisting, fills in details for ones already here.
+    importPerformers(incoming, { updateExisting = true } = {}) {
+      const entries = (Array.isArray(incoming) ? incoming : []).map(normalizePerformer).filter((p) => p.name);
+      const unique = entries.filter((p, i) => entries.findIndex((q) => sameName(q.name, p.name)) === i);
+      if (unique.length > MAX_IMPORT) throw new Error(`An import can add up to ${MAX_IMPORT} performers.`);
+      const counts = { added: 0, updated: 0, unchanged: 0 };
+      for (const item of planImport(unique, performers, { updateExisting })) {
+        if (item.status === 'new') {
+          performers.push({ id: randomUUID(), ...item.performer });
+          counts.added++;
+        } else if (item.status === 'update') {
+          performers[performers.indexOf(item.existing)] = item.performer;
+          counts.updated++;
+        } else {
+          counts.unchanged++;
+        }
+      }
+      if (counts.added || counts.updated) persistPerformers();
+      return counts;
     },
 
     deletePerformer(id) {

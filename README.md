@@ -6,6 +6,7 @@ What it does (✅ done, 🚧 planned):
 
 - ✅ Edit the current segment, up to 4 performers, and the next segment, writing them to text files that OBS text sources read
 - ✅ Performer directory: pronouns and socials saved once and filled in automatically by name
+- ✅ Import performers from an Excel workbook, CSV or tab-separated file
 - ✅ Speedrun timer on the Dashboard, with a finish button per runner for races of up to 4, and an uploadable timer font
 - ✅ The timer as an OBS Browser source
 - ✅ Import the run order from Horaro, show it on Schedule, and fill Edit Segment from it
@@ -93,7 +94,18 @@ Typing or picking a name that's in the performer directory fills in that perform
 - **While following:** moving a segment to Live pulls the next run into the last Future runs row. When Horaro changes, Next Segment and Future runs rows you haven't edited by hand update. Rows you've edited are kept, and the Live Segment is never changed. The rows in Edit Segment are marked Live, Next and Future run 1–4.
 - **Stop following** leaves the rows as they are.
 
-**Performers tab.** Add, edit and delete directory entries. Handles can be pasted as `@name` or as a full profile URL; they're cleaned up to just the handle. The stream title (planned) tags each performer with their social handle, whatever the platform, unless it's a link such as a website.
+**Performers tab.** Add, edit and delete directory entries. Handles can be pasted as `@name` or as a full profile URL; they're cleaned up to just the handle. The stream title tags each performer with their social handle, whatever the platform, unless it's a link such as a website. While the directory is empty, the tab offers a spreadsheet import instead, with **Add a performer by hand** for adding one at a time.
+
+**Performer import** (on the empty Performers tab, and in Settings). Drop or choose an Excel workbook (`.xlsx`), CSV or tab-separated file; from Google Sheets, use File › Download. The first row holds column headings, in any order:
+
+| Column | Notes |
+|---|---|
+| **Name** (required) | `Runner`, `Performer` or `Display name` work too. Existing performers are matched by name, ignoring case. |
+| Pronouns | As written, e.g. `they/them`. |
+| Social | A profile link (`twitch.tv/…`, `youtube.com/@…`, `kick.com/…` or a website), or a handle with a **Platform** column beside it. |
+| Twitch, YouTube, Kick, Website | Instead of Social: one column per site. The first one filled in is used. |
+
+Before anything is saved, a preview lists every row as **New**, **Updates pronouns/social**, **Already up to date** or **Skipped** (no name, or the same name as an earlier row). Performers already in the directory can be updated from the file or kept as they are, and blank cells never erase anything. Only the first visible sheet of a workbook is read. CSV files saved by Excel in Windows-1252 or with semicolons work as well. A backup of the directory goes to `data/backups` before each import. Settings has a template to download.
 
 **Settings tab: Horaro schedule.**
 
